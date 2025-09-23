@@ -44,9 +44,14 @@
     <Page Include="Services\Mail\Templates\Welcome.html" />
   </ItemGroup>
 
-	
-	
-  <ItemGroup>
+	<ItemGroup>
+		<Content Include="Services/Mail/Templates/**">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
+
+	<ItemGroup>
     <ProjectReference Include="..\DomainModels\DomainModels.csproj" />
     <ProjectReference Include="..\H2-Projekt.ServiceDefaults\H2-Projekt.ServiceDefaults.csproj" />
   </ItemGroup>
