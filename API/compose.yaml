@@ -32,6 +32,14 @@ services:
       Ldap__GroupMappings__Hotel-Cleaners: "Cleaner"
       # Ikke nødvendigt med DNS/extra_hosts når du bruger IP.
 
+      # --- Mail Settings
+      MailSettings__SmtpServer: "smtp.gmail.com"
+      MailSettings__SmtpPort: "587"
+      MailSettings__SmtpUsername: "johotelsjo@gmail.com"
+      MailSettings__SmtpPassword: "ioycgshotopztbsn"   # Gmail App Password, 16 chars, NO spaces
+      MailSettings__FromEmail: "johotelsjo@gmail.com"   # must match username
+      MailSettings__FromName: "JoHotel"
+
     restart: unless-stopped
     networks:
       - h2-network
