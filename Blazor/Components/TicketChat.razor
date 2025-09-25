@@ -49,7 +49,7 @@
     protected override async Task OnParametersSetAsync()
     {
         await EnsureConnectedSubscribedAndJoinedAsync();
-        await LoadHistoryIfNeededAsync();   
+        await LoadHistoryIfNeededAsync();
     }
 
     private async Task EnsureConnectedSubscribedAndJoinedAsync()
@@ -84,15 +84,15 @@
                 });
             });
 
-            _subJoined = Rtc.OnJoined<int>(tid => Console.WriteLine($"Joined group ticket:{tid}"));
+            _subJoined = Rtc.OnJoined<int>(tid => Console.WriteLine($"Joined ticket:{tid}"));
             _subError = Rtc.OnError<string>(msg => Console.Error.WriteLine($"Hub error: {msg}"));
         }
 
         if (_joinedTicketId != TicketId)
         {
-            await Rtc.JoinAsync(TicketId);
+            await Rtc.EnsureJoinAsync(TicketId);
             _joinedTicketId = TicketId;
-            _historyLoaded = false;  
+            _historyLoaded = false;
             _messages.Clear();
         }
     }
@@ -144,6 +144,9 @@
             Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
             return;
         }
+
+        var currentUid = ReadUserIdFromJwt(token);
+        if (currentUid != 0) _myUserId = currentUid;
 
         var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
         var url = new Uri(new Uri(apiBase), $"tickets/{TicketId}/messages");

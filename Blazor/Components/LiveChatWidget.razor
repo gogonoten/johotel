@@ -138,7 +138,8 @@
 
             var hubUrl = new Uri(new Uri(apiBase), "hubs/tickets").ToString();
             await Rtc.StartAsync(token, hubUrl);
-            await Rtc.JoinAsync(_ticketId.Value);
+            await Rtc.EnsureJoinAsync(_ticketId.Value);
+
 
             _ = Rtc.OnMessageReceived<Incoming>(incoming =>
             {
