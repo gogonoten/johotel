@@ -1,13 +1,16 @@
 ﻿@page "/"
 @using DomainModels
-@inject Blazor.Services.APIService Api
+@using System.Net
+@using System.Net.Http.Headers
+@inject Blazor.Services.APIService Api     
 @inject NavigationManager Nav
-
-@* Hero – fuldskærms billede *@
+@inject HttpClient Http                     
+@inject Blazor.Services.TicketSignalRService Rtc
+@inject IConfiguration Config           
+@inject TokenStorage Tokens                 
 
 <section class="hero-fit">
     <img class="hero-fit__img" src="@ImgUrl("pic1.png")" alt="JoHotel – stemningsfuld lobby" />
-
     <div class="hero-fit__overlay" aria-hidden="true"></div>
 
     <div class="container hero-fit__inner">
@@ -21,10 +24,16 @@
             <span class="lux-pre">Velkommen til</span>
             <span class="lux-brand">JoHotel</span>
         </h1>
+
+        <div class="mt-3">
+            <button class="btn btn-gold" @onclick="StartChat">💬 Chat med os</button>
+            @if (!string.IsNullOrWhiteSpace(_chatError))
+            {
+                <span class="text-danger ms-2">@_chatError</span>
+            }
+        </div>
     </div>
 </section>
-
-@* Udvalgte værelser *@
 
 <section id="featured" class="section-pad">
     <div class="container">
@@ -103,8 +112,25 @@
     </div>
 </section>
 
+@if (_chatOpen && _chatTicketId is not null)
+{
+    <div class="chat-flyout">
+        <div class="chat-flyout__head">
+            <strong>Live chat</strong>
+            <button class="btn btn-sm btn-outline" @onclick="() => _chatOpen = false">✕</button>
+        </div>
+        <div class="chat-flyout__body">
+            <TicketChat TicketId="@_chatTicketId.Value" />
+        </div>
+    </div>
+}
+
 @code {
     private List<RoomDto>? featured;
+
+    int? _chatTicketId;
+    bool _chatOpen;
+    string _chatError = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -117,6 +143,59 @@
         {
             featured = new List<RoomDto>();
         }
+    }
+
+    async Task StartChat()
+    {
+        _chatError = "";
+        try
+        {
+            var token = await Tokens.GetTokenAsync(); 
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+                return;
+            }
+
+            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
+            var postUrl = new Uri(new Uri(apiBase), "tickets");
+
+            var create = new CreateTicketDto
+            {
+                Title = "Live chat",
+                Description = "| LiveChat Påbegyndt |",
+                Department = "Reception",
+                Priority = TicketPriority.Normal
+            };
+
+            var req = new HttpRequestMessage(HttpMethod.Post, postUrl)
+            {
+                Content = JsonContent.Create(create)
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var res = await Http.SendAsync(req);
+            if (res.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+                return;
+            }
+
+            res.EnsureSuccessStatusCode();
+            var dto = await res.Content.ReadFromJsonAsync<TicketDto>();
+            _chatTicketId = dto!.Id;
+
+            var hubUrl = new Uri(new Uri(apiBase), "hubs/tickets").ToString();
+            await Rtc.StartAsync(token, hubUrl);
+            await Rtc.JoinAsync(_chatTicketId.Value);   
+            _chatOpen = true;                           
+            StateHasChanged();
+        }
+        catch
+        {
+            _chatError = "Kunne ikke starte chatten. Prøv igen.";
+        }
+        StateHasChanged();
     }
 
     string ImgUrl(string file) => $"{Nav.BaseUri}{file}";

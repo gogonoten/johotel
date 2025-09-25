@@ -12,6 +12,10 @@ namespace API.Data
         public DbSet<Room> Rooms { get; set; } = null!;
         public DbSet<Booking> Bookings { get; set; } = null!;
 
+        public DbSet<Ticket> Tickets { get; set; } = null!;
+        public DbSet<TicketMessage> TicketMessages { get; set; } = null!;
+        public DbSet<TicketAttachment> TicketAttachments { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -42,9 +46,8 @@ namespace API.Data
 
             modelBuilder.Entity<Room>()
                 .Property(r => r.Type)
-                .HasConversion<string>();
+                .HasConversion<string>(); 
 
-            // Seed data
             var staticDate = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
             modelBuilder.Entity<Role>().HasData(
@@ -54,15 +57,10 @@ namespace API.Data
                 new Role { Id = 4, Name = "Cleaner", CreatedAt = staticDate, UpdatedAt = staticDate }
             );
 
-            // Seed 400 rooms: 1–300 Standard, 301–360 Family, 361–400 Suite
             var rooms = new List<Room>();
             for (int i = 1; i <= 400; i++)
             {
-                var type =
-                    i <= 300 ? RoomType.Standard :
-                    i <= 360 ? RoomType.Family :
-                               RoomType.Suite;
-
+                var type = i <= 300 ? RoomType.Standard : i <= 360 ? RoomType.Family : RoomType.Suite;
                 rooms.Add(new Room
                 {
                     Id = i,
@@ -75,7 +73,6 @@ namespace API.Data
             }
             modelBuilder.Entity<Room>().HasData(rooms);
 
-            // Seed admin
             modelBuilder.Entity<User>().HasData(new User
             {
                 Id = 1,
@@ -88,6 +85,58 @@ namespace API.Data
                 CreatedAt = staticDate,
                 UpdatedAt = staticDate,
                 LastLogin = staticDate
+            });
+
+            modelBuilder.Entity<Ticket>(e =>
+            {
+                e.Property(x => x.Number).HasMaxLength(32);
+                e.Property(x => x.Title).HasMaxLength(200);
+
+                e.HasIndex(x => new { x.Status, x.Department, x.Priority, x.CreatedAt });
+
+                e.HasOne(x => x.CustomerUser)
+                    .WithMany()
+                    .HasForeignKey(x => x.CustomerUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                e.HasOne(x => x.AssigneeUser)
+                    .WithMany()
+                    .HasForeignKey(x => x.AssigneeUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                e.HasOne(x => x.Booking)
+                    .WithMany()
+                    .HasForeignKey(x => x.BookingId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+            
+            });
+
+            modelBuilder.Entity<TicketMessage>(e =>
+            {
+                e.Property(x => x.Content).HasMaxLength(4000);
+
+                e.HasOne(x => x.Ticket)
+                    .WithMany(t => t.Messages)
+                    .HasForeignKey(x => x.TicketId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                e.HasOne(x => x.AuthorUser)
+                    .WithMany()
+                    .HasForeignKey(x => x.AuthorUserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<TicketAttachment>(e =>
+            {
+                e.Property(x => x.FileName).HasMaxLength(255);
+                e.Property(x => x.ContentType).HasMaxLength(127);
+                e.Property(x => x.StoragePath).HasMaxLength(1024);
+
+                e.HasOne(x => x.Ticket)
+                    .WithMany(t => t.Attachments)
+                    .HasForeignKey(x => x.TicketId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

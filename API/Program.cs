@@ -23,12 +23,10 @@ builder.Services.AddDbContext<AppDBContext>(options =>
     options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
 });
 
-// --- Controllers / MVC ---
 builder.Services.AddControllers();
 
-// --- LDAP (fra fil 1) ---
 builder.Services.Configure<LdapOptions>(builder.Configuration.GetSection("Ldap"));
-builder.Services.AddSingleton<ILdapService, LdapService>(); // auth + grupper
+builder.Services.AddSingleton<ILdapService, LdapService>();
 
 // --- JWT ---
 var jwtKey = builder.Configuration["Jwt:SecretKey"]
@@ -36,6 +34,17 @@ var jwtKey = builder.Configuration["Jwt:SecretKey"]
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "H2-2025-API";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "H2-2025-Client";
 var key = Encoding.UTF8.GetBytes(jwtKey);
+
+// --- SignalR ---
+builder.Services.AddSignalR();
+
+// --- Authorization ---
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("StaffOnly", p => p.RequireRole("Admin", "Manager"));
+});
+
+builder.Services.AddScoped<ITicketService, TicketService>();
 
 builder.Services
     .AddAuthentication(options =>
@@ -45,8 +54,24 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
-        options.RequireHttpsMetadata = false; // slå til i prod
+        options.RequireHttpsMetadata = false; // enable in production if needed
         options.SaveToken = true;
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+
+                // ?? MUST match MapHub path exactly
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments("/api/hubs/tickets"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -61,7 +86,7 @@ builder.Services
     });
 
 // --- CORS ---
-// MÅSKE ÆNDRE TIL DEN SPECIFIKKE FRONTEND-URL I STEDET FOR ÅBEN FOR ALLE?
+// For development you can keep this permissive. In production, scope it to your frontend origin.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DevAll", p => p
@@ -81,16 +106,13 @@ builder.Services.AddSwaggerGen(c =>
         Description = "API til hotel booking system (JWT, EF Core, CORS)."
     });
 
-    // Indlæs XML-kommentarer for controllers/endpoints (fra fil 1)
     var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     if (File.Exists(xmlPath))
         c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
 
-    // Unikke schema-navne - undgå DTO-navne-konflikter (fra fil 1)
     c.CustomSchemaIds(t => t.FullName?.Replace("+", "."));
 
-    // Bearer auth - Swagger (fra fil 1)
     var securityScheme = new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -105,18 +127,17 @@ builder.Services.AddSwaggerGen(c =>
     c.AddSecurityRequirement(new OpenApiSecurityRequirement { { securityScheme, Array.Empty<string>() } });
 });
 
-// --- DI: repos/services ---
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddScoped<JwtService>();
 
-// --- MailService (fra fil 2) ---
 builder.Services.Configure<MailSettings>(builder.Configuration.GetSection("MailSettings"));
 builder.Services.AddScoped<IMailService, MailService>();
 
 var app = builder.Build();
 
-// Only redirect in non-dev
+// --- Middleware pipeline ---
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
@@ -129,13 +150,17 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = string.Empty;
 });
 
+// ? CORS must run before endpoints so SignalR gets the headers
 app.UseCors("DevAll");
+
+// ? Auth before endpoints
 app.UseAuthentication();
 app.UseAuthorization();
 
+// ? Map endpoints after middleware
+app.MapHub<TicketHub>("/api/hubs/tickets");
 app.MapControllers();
 
-// Simple health endpoint
 app.MapGet("/health", () => Results.Ok("OK"));
 
 app.Run();

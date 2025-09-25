@@ -22,7 +22,7 @@ namespace Blazor
             if (string.IsNullOrWhiteSpace(apiEndpoint))
             {
                 apiEndpoint = builder.HostEnvironment.IsDevelopment()
-                    ? "http://localhost:9022/"  //MÅSKE DENNE?
+                    ? "http://localhost:9022/api/"  //MÅSKE DENNE?
                     : new Uri(new Uri(builder.HostEnvironment.BaseAddress), "/api/").ToString();
             }
 
@@ -35,6 +35,9 @@ namespace Blazor
             builder.Services.AddScoped<TokenStorage>();
             builder.Services.AddScoped<AuthenticationStateProvider,AuthStateProvider>();
             builder.Services.AddBlazoredLocalStorage();
+
+            // Blazor/Program.cs
+            builder.Services.AddScoped<TicketSignalRService>();
 
             builder.Services.AddHttpClient<APIService>(client =>
             {

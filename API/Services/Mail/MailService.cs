@@ -64,7 +64,7 @@ public sealed class MailService : IMailService
 
         var text = $"Hej {username}, din konto er oprettet. Velkommen til H2-MAGS!";
 
-        return SendAsync(toEmail, "Velkommen til H2-MAGS", html, text, ct);
+        return SendAsync(toEmail, "Velkommen til JoHotel", html, text, ct);
     }
 
     public Task SendBookingConfirmationEmailAsync(
@@ -94,7 +94,7 @@ public sealed class MailService : IMailService
             $"Total pris: {totalPrice}\n" +
             $"Booking ID: {bookingId}";
 
-        return SendAsync(toEmail, "Din booking er bekræftet", html, text, ct);
+        return SendAsync(toEmail, "Booking Bekræftelse", html, text, ct);
     }
 
     private string LoadTemplate(string fileName)

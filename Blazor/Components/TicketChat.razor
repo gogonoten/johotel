@@ -1,0 +1,196 @@
+﻿@using DomainModels
+@inject HttpClient Http
+@inject Blazor.Services.TicketSignalRService Rtc
+@inject IConfiguration Config
+@inject TokenStorage Tokens
+@inject NavigationManager Nav
+
+<div class="ticket-chat">
+    <div class="messages" @ref="_messagesBox">
+        @foreach (var m in _messages)
+        {
+            <div class="message @(m.IsMine ? "mine":"theirs")">
+                <div class="meta">
+                    <b>@m.Author</b>
+                    <span>@m.When.ToLocalTime().ToString("HH:mm")</span>
+                    @(m.IsInternal ? (MarkupString)"<span class='badge'>Intern</span>" : (MarkupString)"")
+                </div>
+                <div class="bubble">@m.Text</div>
+            </div>
+        }
+    </div>
+
+    <EditForm Model="_form" OnValidSubmit="Send">
+        <InputTextArea class="form-control" @bind-Value="_form.Content" rows="2" />
+        <div class="mt-2 d-flex justify-content-between">
+            <label><InputCheckbox @bind-Value="_form.IsInternal" /> Intern note</label>
+            <button class="btn btn-success" type="submit">Send</button>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    [Parameter] public int TicketId { get; set; }
+
+    private class ChatForm { public string Content { get; set; } = ""; public bool IsInternal { get; set; } }
+    private ChatForm _form = new();
+
+    private readonly List<Msg> _messages = new();
+    private record Msg(string Author, string Text, bool IsInternal, DateTime When, bool IsMine);
+
+    private IDisposable? _subMessage;
+    private IDisposable? _subJoined;
+    private IDisposable? _subError;
+    private int? _joinedTicketId;
+    private bool _historyLoaded = false;
+    private int _myUserId = 0;
+    private ElementReference _messagesBox;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await EnsureConnectedSubscribedAndJoinedAsync();
+        await LoadHistoryIfNeededAsync();   
+    }
+
+    private async Task EnsureConnectedSubscribedAndJoinedAsync()
+    {
+        var token = await Tokens.GetTokenAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+            return;
+        }
+
+        if (_myUserId == 0) _myUserId = ReadUserIdFromJwt(token);
+
+        var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
+        var hubUrl = new Uri(new Uri(apiBase), "hubs/tickets").ToString(); 
+
+        await Rtc.StartAsync(token, hubUrl);
+
+        if (_subMessage is null)
+        {
+            _subMessage = Rtc.OnMessageReceived<Incoming>(incoming =>
+            {
+                if (incoming.TicketId != TicketId) return;
+
+                if (_myUserId != 0 && incoming.AuthorUserId == _myUserId) return;
+
+                _messages.Add(new Msg(incoming.AuthorName, incoming.Content, incoming.IsInternal, incoming.CreatedAtUtc, false));
+                InvokeAsync(async () =>
+                {
+                    StateHasChanged();
+                    await ScrollToBottomAsync();
+                });
+            });
+
+            _subJoined = Rtc.OnJoined<int>(tid => Console.WriteLine($"Joined group ticket:{tid}"));
+            _subError = Rtc.OnError<string>(msg => Console.Error.WriteLine($"Hub error: {msg}"));
+        }
+
+        if (_joinedTicketId != TicketId)
+        {
+            await Rtc.JoinAsync(TicketId);
+            _joinedTicketId = TicketId;
+            _historyLoaded = false;  
+            _messages.Clear();
+        }
+    }
+
+    private async Task LoadHistoryIfNeededAsync()
+    {
+        if (_historyLoaded) return;
+
+        var token = await Tokens.GetTokenAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+            return;
+        }
+
+        var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
+        var url = new Uri(new Uri(apiBase), $"tickets/{TicketId}");
+
+        try
+        {
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            var res = await Http.SendAsync(req);
+            res.EnsureSuccessStatusCode();
+
+            var detail = await res.Content.ReadFromJsonAsync<TicketDetailDto>();
+            if (detail?.Messages is not null)
+            {
+                foreach (var m in detail.Messages.OrderBy(m => m.CreatedAt))
+                    _messages.Add(new Msg(m.AuthorName, m.Content, m.IsInternal, m.CreatedAt.UtcDateTime, false));
+            }
+            _historyLoaded = true;
+            await ScrollToBottomAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Load history failed: {ex.Message}");
+        }
+    }
+
+    private async Task Send()
+    {
+        if (string.IsNullOrWhiteSpace(_form.Content)) return;
+
+        var token = await Tokens.GetTokenAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+            return;
+        }
+
+        var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
+        var url = new Uri(new Uri(apiBase), $"tickets/{TicketId}/messages");
+
+        var payload = new PostTicketMessageDto { Content = _form.Content.Trim(), IsInternal = _form.IsInternal };
+        var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(payload) };
+        req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var res = await Http.SendAsync(req);
+        res.EnsureSuccessStatusCode();
+
+        _messages.Add(new Msg("Me", _form.Content.Trim(), _form.IsInternal, DateTime.UtcNow, true));
+        _form = new ChatForm();
+        await ScrollToBottomAsync();
+    }
+
+    private async Task ScrollToBottomAsync()
+    {
+        try { await Task.Yield(); await _messagesBox.FocusAsync(); } catch { }
+    }
+
+    public void Dispose()
+    {
+        _subMessage?.Dispose();
+        _subJoined?.Dispose();
+        _subError?.Dispose();
+    }
+
+    private static int ReadUserIdFromJwt(string jwt)
+    {
+        try
+        {
+            var parts = jwt.Split('.');
+            if (parts.Length < 2) return 0;
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            switch (payload.Length % 4) { case 2: payload += "=="; break; case 3: payload += "="; break; }
+            var json = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(payload)).RootElement;
+
+            if (json.TryGetProperty("userId", out var idEl))
+            {
+                if (idEl.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(idEl.GetString(), out var idS)) return idS;
+                if (idEl.ValueKind == System.Text.Json.JsonValueKind.Number && idEl.TryGetInt32(out var idN)) return idN;
+            }
+        }
+        catch { }
+        return 0;
+    }
+
+    private record Incoming(int TicketId, int AuthorUserId, string AuthorName, bool IsInternal, string Content, DateTime CreatedAtUtc);
+}

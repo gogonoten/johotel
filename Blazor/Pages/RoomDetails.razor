@@ -14,10 +14,8 @@ else
              style="@($"--bg-image:url('{ImgUrl(RoomHelpers.ImageFor(room.Type))}'); --bg-overlay:linear-gradient(0deg, rgba(47,36,29,.25), rgba(47,36,29,.25))")">
         <div class="hero-overlay"></div>
         <div class="hero-inner">
-            <div class="crumbs" aria-label="Brødkrumme">
-                <a href="/">Forside</a><span>/</span><a href="/booking">Værelser</a><span>/</span><span>Værelse @room.RoomNumber</span>
-            </div>
-            <h1 class="lux-brand">Værelse @room.RoomNumber</h1>
+            
+            <h1 class="lux-brand">Preview af Værelset</h1>
             <p class="section-sub" style="color:#F6EBDD">
                 @room.Type.DisplayName() — Fra @RoomHelpers.BasePrice(room.Type).AsCurrency() / nat
             </p>
