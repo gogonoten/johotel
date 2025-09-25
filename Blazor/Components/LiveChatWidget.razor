@@ -3,7 +3,6 @@
 @inject IConfiguration Config
 @inject TokenStorage Tokens
 @inject NavigationManager Nav
-@inject Blazor.Services.TicketSignalRService Rtc
 
 <div class="lux-chat">
     @if (!_open || _minimized)
@@ -62,6 +61,11 @@
                         <button class="lux-btn lux-btn--gold" @onclick="StartChat" disabled="@_busy">
                             @_busy ? "Starter…" : "Start chat"
                         </button>
+
+                        @if (!string.IsNullOrWhiteSpace(_error))
+                        {
+                            <p class="text-danger" style="margin-top:.5rem">@_error</p>
+                        }
                     </div>
                 }
                 else
@@ -81,6 +85,7 @@
     bool _open, _minimized, _busy, _showPanel;
     int _unread;
     int? _ticketId;
+    string _error = "";
 
     string _dept = "Reception";
     string _prefillMsg = "Hej! Jeg vil gerne have hjælp.";
@@ -92,20 +97,17 @@
         _ = Task.Run(async () => { await Task.Delay(10); _showPanel = true; await InvokeAsync(StateHasChanged); });
     }
 
-    void Minimize()
-    {
-        _minimized = true;
-    }
+    void Minimize() => _minimized = true;
 
     void Close()
     {
-        _open = false; _minimized = false; _ticketId = null; _unread = 0;
+        _open = false; _minimized = false; _unread = 0;
     }
 
     async Task StartChat()
     {
         if (_busy) return;
-        _busy = true;
+        _busy = true; _error = "";
         try
         {
             var token = await Tokens.GetTokenAsync();
@@ -115,7 +117,7 @@
                 return;
             }
 
-            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri; 
+            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;  
             var postUrl = new Uri(new Uri(apiBase), "tickets");
 
             var create = new CreateTicketDto
@@ -136,28 +138,16 @@
             var dto = await res.Content.ReadFromJsonAsync<TicketDto>();
             _ticketId = dto!.Id;
 
-            var hubUrl = new Uri(new Uri(apiBase), "hubs/tickets").ToString();
-            await Rtc.StartAsync(token, hubUrl);
-            await Rtc.EnsureJoinAsync(_ticketId.Value);
-
-
-            _ = Rtc.OnMessageReceived<Incoming>(incoming =>
-            {
-                if (_ticketId is null || incoming.TicketId != _ticketId.Value) return;
-                if (_minimized || !_open) _unread++;
-                InvokeAsync(StateHasChanged);
-            });
-
             _prefillMsg = "";
         }
-        catch
+        catch (Exception ex)
         {
+            _error = "Kunne ikke starte chatten. Prøv igen.";
+            Console.Error.WriteLine($"LiveChatWidget StartChat error: {ex.Message}");
         }
         finally
         {
             _busy = false;
         }
     }
-
-    private record Incoming(int TicketId, int AuthorUserId, string AuthorName, bool IsInternal, string Content, DateTime CreatedAtUtc);
 }
