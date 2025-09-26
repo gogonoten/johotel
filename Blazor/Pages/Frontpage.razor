@@ -139,10 +139,12 @@
 
     async Task StartChat()
     {
+        if (_chatOpen && _chatTicketId is not null) return; // already open
         _chatError = "";
+
         try
         {
-            var token = await Tokens.GetTokenAsync(); 
+            var token = await Tokens.GetTokenAsync();
             if (string.IsNullOrWhiteSpace(token))
             {
                 Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
@@ -153,17 +155,15 @@
             var postUrl = new Uri(new Uri(apiBase), "tickets");
 
             var create = new CreateTicketDto
-            {
-                Title = "Live chat",
-                Description = "| LiveChat Påbegyndt |",
-                Department = "Reception",
-                Priority = TicketPriority.Normal
-            };
+                {
+                    Title = "Live chat",
+                    Description = "| LiveChat Påbegyndt |",
+                    Department = "Reception",
+                    Priority = TicketPriority.Normal
+                };
 
             var req = new HttpRequestMessage(HttpMethod.Post, postUrl)
-            {
-                Content = JsonContent.Create(create)
-            };
+                { Content = JsonContent.Create(create) };
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
             var res = await Http.SendAsync(req);
@@ -172,23 +172,21 @@
                 Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
                 return;
             }
-
             res.EnsureSuccessStatusCode();
+
             var dto = await res.Content.ReadFromJsonAsync<TicketDto>();
             _chatTicketId = dto!.Id;
 
-            var hubUrl = new Uri(new Uri(apiBase), "hubs/tickets").ToString();
-            await Rtc.StartAsync(token, hubUrl);
-            await Rtc.EnsureJoinAsync(_chatTicketId.Value);
-            _chatOpen = true;                           
+            // IMPORTANT: let <TicketChat> do the hub connection + join
+            _chatOpen = true;
             StateHasChanged();
         }
         catch
         {
             _chatError = "Kunne ikke starte chatten. Prøv igen.";
         }
-        StateHasChanged();
     }
+
 
     string ImgUrl(string file) => $"{Nav.BaseUri}{file}";
 }

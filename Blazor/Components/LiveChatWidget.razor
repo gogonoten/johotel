@@ -7,7 +7,9 @@
 <div class="lux-chat">
     @if (!_open || _minimized)
     {
-        <button class="lux-chat__launcher" @onclick="OpenOrRestore" aria-label="Åbn livechat">
+        <button class="lux-chat__launcher"
+                @onclick="OpenOrRestore"
+                aria-label="Åbn livechat">
             <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
                 <path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path>
             </svg>
@@ -60,8 +62,12 @@
                             <textarea class="lux-textarea" rows="3" placeholder="Skriv din besked…" @bind="_prefillMsg"></textarea>
                         </div>
 
-                        <button class="lux-btn lux-btn--gold" @onclick="StartChat" disabled="@_busy">
-                            Send
+                        <button class="lux-btn lux-btn--gold"
+                                @onclick="StartChat"
+                        @onclick:preventDefault
+                        @onclick:stopPropagation
+                                disabled="@_busy">
+                            @_busy ? "Starter…" : "Send"
                         </button>
 
                         @if (!string.IsNullOrWhiteSpace(_error))
@@ -111,7 +117,7 @@
 
     async Task StartChat()
     {
-        if (_busy) return;
+        if (_busy || _ticketId is not null) { _open = true; _minimized = false; return; } 
         _busy = true; _error = "";
         try
         {
@@ -122,7 +128,7 @@
                 return;
             }
 
-            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
+            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;  // /api/ i Docker
             var postUrl = new Uri(new Uri(apiBase), "tickets");
 
             var create = new CreateTicketDto
@@ -144,6 +150,7 @@
             _ticketId = dto!.Id;
 
             _prefillMsg = "";
+            _open = true; _minimized = false;
         }
         catch (Exception ex)
         {

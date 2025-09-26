@@ -42,6 +42,9 @@
     private readonly List<Msg> _messages = new();
     private record Msg(string Author, string Text, bool IsInternal, DateTime When, bool IsMine);
 
+    private readonly HashSet<int> _seenHistoryIds = new();
+    private readonly HashSet<string> _seenLiveKeys = new(); 
+
     private IDisposable? _subMessage;
     private IDisposable? _subPresence;
     private IDisposable? _subJoined;
@@ -70,7 +73,7 @@
         if (_myUserId == 0) _myUserId = ReadUserIdFromJwt(token);
 
         var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
-        var hubUrl = new Uri(new Uri(apiBase), "hubs/tickets").ToString(); // /api/hubs/tickets
+        var hubUrl = new Uri(new Uri(apiBase), "hubs/tickets").ToString();
 
         await Rtc.StartAsync(token, hubUrl);
 
@@ -82,16 +85,14 @@
 
                 if (_myUserId != 0 && incoming.AuthorUserId == _myUserId) return;
 
-                _messages.Add(new Msg(incoming.AuthorName, incoming.Content, incoming.IsInternal, incoming.CreatedAtUtc, false));
-
-                if (OnInbound.HasDelegate)
-                    await OnInbound.InvokeAsync(new InboundMsg(incoming.AuthorName, incoming.Content, incoming.CreatedAtUtc));
-
-                await InvokeAsync(async () =>
+                var key = MakeKey(incoming.AuthorName, incoming.CreatedAtUtc, incoming.Content);
+                if (_seenLiveKeys.Add(key))
                 {
-                    StateHasChanged();
-                    await ScrollToBottomAsync();
-                });
+                    _messages.Add(new Msg(incoming.AuthorName, incoming.Content, incoming.IsInternal, incoming.CreatedAtUtc, false));
+                    if (OnInbound.HasDelegate)
+                        await OnInbound.InvokeAsync(new InboundMsg(incoming.AuthorName, incoming.Content, incoming.CreatedAtUtc));
+                    await InvokeAsync(async () => { StateHasChanged(); await ScrollToBottomAsync(); });
+                }
             });
 
             _subPresence = Rtc.OnAgentPresenceChanged<PresenceHub>(async p =>
@@ -109,8 +110,11 @@
         {
             await Rtc.EnsureJoinAsync(TicketId);
             _joinedTicketId = TicketId;
+
             _historyLoaded = false;
             _messages.Clear();
+            _seenHistoryIds.Clear();
+            _seenLiveKeys.Clear();
         }
     }
 
@@ -140,7 +144,13 @@
             if (detail?.Messages is not null)
             {
                 foreach (var m in detail.Messages.OrderBy(m => m.CreatedAt))
-                    _messages.Add(new Msg(m.AuthorName, m.Content, m.IsInternal, m.CreatedAt.UtcDateTime, false));
+                {
+                    if (_seenHistoryIds.Add(m.Id))
+                    {
+                        _messages.Add(new Msg(m.AuthorName, m.Content, m.IsInternal, m.CreatedAt.UtcDateTime, false));
+                        _seenLiveKeys.Add(MakeKey(m.AuthorName, m.CreatedAt.UtcDateTime, m.Content));
+                    }
+                }
             }
 
             _historyLoaded = true;
@@ -169,14 +179,19 @@
         var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
         var url = new Uri(new Uri(apiBase), $"tickets/{TicketId}/messages");
 
-        var payload = new PostTicketMessageDto { Content = _form.Content.Trim(), IsInternal = _form.IsInternal };
+        var text = _form.Content.Trim();
+        var payload = new PostTicketMessageDto { Content = text, IsInternal = _form.IsInternal };
+
         var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(payload) };
         req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
         var res = await Http.SendAsync(req);
         res.EnsureSuccessStatusCode();
 
-        _messages.Add(new Msg("Me", _form.Content.Trim(), _form.IsInternal, DateTime.UtcNow, true));
+        var now = DateTime.UtcNow;
+        _messages.Add(new Msg("Me", text, _form.IsInternal, now, true));
+        _seenLiveKeys.Add(MakeKey("Me", now, text));
+
         _form = new ChatForm();
         await ScrollToBottomAsync();
     }
@@ -213,6 +228,9 @@
         catch { }
         return 0;
     }
+
+    private static string MakeKey(string author, DateTime whenUtc, string content)
+        => $"{author}|{whenUtc.ToUniversalTime():O}|{content}";
 
     private record IncomingHub(int TicketId, int AuthorUserId, string AuthorName, bool IsInternal, string Content, DateTime CreatedAtUtc);
     private record PresenceHub(int TicketId, bool StaffOnline, int Count);
