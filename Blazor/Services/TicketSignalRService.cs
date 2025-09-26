@@ -56,6 +56,8 @@ public class TicketSignalRService : IAsyncDisposable
 
     public IDisposable OnJoined<T>(Action<T> handler) => _conn!.On("Joined", handler);
     public IDisposable OnError<T>(Action<T> handler) => _conn!.On("Error", handler);
+    public IDisposable OnAgentPresenceChanged<T>(Action<T> handler) => _conn!.On("AgentPresenceChanged", handler);
+
 
     public async ValueTask DisposeAsync()
     {

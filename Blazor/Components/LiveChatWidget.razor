@@ -24,9 +24,11 @@
         <div class="lux-chat__panel @(_showPanel ? "lux-chat__panel--in" : "")" role="dialog" aria-label="Live chat">
             <div class="lux-chat__head">
                 <div class="lux-chat__brand">
-                    <span class="lux-orn">❦</span>
                     <strong>Live chat</strong>
-                    <small>JoHotel Concierge</small>
+                    <small class="lux-statusline">
+                        <span class="lux-statusdot @( _agentOnline ? "lux-statusdot--on" : "lux-statusdot--off")" aria-hidden="true"></span>
+                        @(_agentOnline ? "JoHotel er online" : "Ingen medarbejder i chatten endnu")
+                    </small>
                 </div>
                 <div class="lux-chat__controls">
                     <button class="lux-icon-btn" title="Minimér" aria-label="Minimér" @onclick="Minimize">—</button>
@@ -40,7 +42,7 @@
                     <div class="lux-chat__start">
                         <div class="lux-chat__intro">
                             <h4>Velkommen 👋</h4>
-                            <p>Vælg afdeling og skriv en kort besked – så forbinder vi dig.</p>
+                            <p>Vælg Emne</p>
                         </div>
 
                         <div class="lux-field">
@@ -59,7 +61,7 @@
                         </div>
 
                         <button class="lux-btn lux-btn--gold" @onclick="StartChat" disabled="@_busy">
-                            @_busy ? "Starter…" : "Start chat"
+                            Send
                         </button>
 
                         @if (!string.IsNullOrWhiteSpace(_error))
@@ -70,12 +72,14 @@
                 }
                 else
                 {
-                    <TicketChat TicketId="@_ticketId.Value" />
+                    <TicketChat TicketId="@_ticketId.Value"
+                                OnAgentPresenceChanged="HandlePresenceChanged"
+                                OnInbound="HandleInbound" />
                 }
             </div>
 
             <div class="lux-chat__foot">
-                <small>Diskret luksus siden 1998</small>
+                <small>Diskret luksus siden 1998 ❦</small>
             </div>
         </div>
     }
@@ -86,6 +90,7 @@
     int _unread;
     int? _ticketId;
     string _error = "";
+    bool _agentOnline = false;
 
     string _dept = "Reception";
     string _prefillMsg = "Hej! Jeg vil gerne have hjælp.";
@@ -101,7 +106,7 @@
 
     void Close()
     {
-        _open = false; _minimized = false; _unread = 0;
+        _open = false; _minimized = false;
     }
 
     async Task StartChat()
@@ -117,7 +122,7 @@
                 return;
             }
 
-            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;  
+            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
             var postUrl = new Uri(new Uri(apiBase), "tickets");
 
             var create = new CreateTicketDto
@@ -149,5 +154,16 @@
         {
             _busy = false;
         }
+    }
+
+    void HandlePresenceChanged(bool online)
+    {
+        _agentOnline = online;
+        StateHasChanged();
+    }
+
+    void HandleInbound(TicketChat.InboundMsg msg)
+    {
+        if (_minimized || !_open) _unread++;
     }
 }

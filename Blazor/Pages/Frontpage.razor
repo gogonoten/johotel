@@ -24,14 +24,6 @@
             <span class="lux-pre">Velkommen til</span>
             <span class="lux-brand">JoHotel</span>
         </h1>
-
-        <div class="mt-3">
-            <button class="btn btn-gold" @onclick="StartChat">💬 Chat med os</button>
-            @if (!string.IsNullOrWhiteSpace(_chatError))
-            {
-                <span class="text-danger ms-2">@_chatError</span>
-            }
-        </div>
     </div>
 </section>
 

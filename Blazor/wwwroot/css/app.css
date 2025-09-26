@@ -2763,3 +2763,27 @@ button.cal-cell {
         height: calc(100% - 120px);
     }
 }
+.lux-statusline {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    color: var(--lux-soft);
+}
+
+.lux-statusdot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    display: inline-block;
+    box-shadow: 0 0 0 3px rgba(0,0,0,.06);
+}
+
+.lux-statusdot--on {
+    background: #2ecc71;
+    box-shadow: 0 0 0 3px rgba(46,204,113,.20);
+}
+
+.lux-statusdot--off {
+    background: #bbb;
+    box-shadow: 0 0 0 3px rgba(0,0,0,.08);
+}

@@ -9,7 +9,7 @@
     <div class="messages" @ref="_messagesBox">
         @foreach (var m in _messages)
         {
-            <div class="message @(m.IsMine ? "mine":"theirs")">
+            <div class="message @(m.IsMine ? "mine" : "theirs")">
                 <div class="meta">
                     <b>@m.Author</b>
                     <span>@m.When.ToLocalTime().ToString("HH:mm")</span>
@@ -32,6 +32,10 @@
 @code {
     [Parameter] public int TicketId { get; set; }
 
+    [Parameter] public EventCallback<bool> OnAgentPresenceChanged { get; set; }
+    public record InboundMsg(string Author, string Text, DateTime When);
+    [Parameter] public EventCallback<InboundMsg> OnInbound { get; set; }
+
     private class ChatForm { public string Content { get; set; } = ""; public bool IsInternal { get; set; } }
     private ChatForm _form = new();
 
@@ -39,8 +43,10 @@
     private record Msg(string Author, string Text, bool IsInternal, DateTime When, bool IsMine);
 
     private IDisposable? _subMessage;
+    private IDisposable? _subPresence;
     private IDisposable? _subJoined;
     private IDisposable? _subError;
+
     private int? _joinedTicketId;
     private bool _historyLoaded = false;
     private int _myUserId = 0;
@@ -64,24 +70,35 @@
         if (_myUserId == 0) _myUserId = ReadUserIdFromJwt(token);
 
         var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
-        var hubUrl = new Uri(new Uri(apiBase), "hubs/tickets").ToString(); 
+        var hubUrl = new Uri(new Uri(apiBase), "hubs/tickets").ToString(); // /api/hubs/tickets
 
         await Rtc.StartAsync(token, hubUrl);
 
         if (_subMessage is null)
         {
-            _subMessage = Rtc.OnMessageReceived<Incoming>(incoming =>
+            _subMessage = Rtc.OnMessageReceived<IncomingHub>(async incoming =>
             {
                 if (incoming.TicketId != TicketId) return;
 
                 if (_myUserId != 0 && incoming.AuthorUserId == _myUserId) return;
 
                 _messages.Add(new Msg(incoming.AuthorName, incoming.Content, incoming.IsInternal, incoming.CreatedAtUtc, false));
-                InvokeAsync(async () =>
+
+                if (OnInbound.HasDelegate)
+                    await OnInbound.InvokeAsync(new InboundMsg(incoming.AuthorName, incoming.Content, incoming.CreatedAtUtc));
+
+                await InvokeAsync(async () =>
                 {
                     StateHasChanged();
                     await ScrollToBottomAsync();
                 });
+            });
+
+            _subPresence = Rtc.OnAgentPresenceChanged<PresenceHub>(async p =>
+            {
+                if (p.TicketId != TicketId) return;
+                if (OnAgentPresenceChanged.HasDelegate)
+                    await OnAgentPresenceChanged.InvokeAsync(p.Count > 0);
             });
 
             _subJoined = Rtc.OnJoined<int>(tid => Console.WriteLine($"Joined ticket:{tid}"));
@@ -125,6 +142,7 @@
                 foreach (var m in detail.Messages.OrderBy(m => m.CreatedAt))
                     _messages.Add(new Msg(m.AuthorName, m.Content, m.IsInternal, m.CreatedAt.UtcDateTime, false));
             }
+
             _historyLoaded = true;
             await ScrollToBottomAsync();
         }
@@ -171,6 +189,7 @@
     public void Dispose()
     {
         _subMessage?.Dispose();
+        _subPresence?.Dispose();
         _subJoined?.Dispose();
         _subError?.Dispose();
     }
@@ -195,5 +214,6 @@
         return 0;
     }
 
-    private record Incoming(int TicketId, int AuthorUserId, string AuthorName, bool IsInternal, string Content, DateTime CreatedAtUtc);
+    private record IncomingHub(int TicketId, int AuthorUserId, string AuthorName, bool IsInternal, string Content, DateTime CreatedAtUtc);
+    private record PresenceHub(int TicketId, bool StaffOnline, int Count);
 }
