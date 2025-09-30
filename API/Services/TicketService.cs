@@ -1,8 +1,11 @@
 ﻿using System.Security.Claims;
 using API.Data;
+using API.Services.Mail;
 using DomainModels;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace API.Services;
 
@@ -12,24 +15,73 @@ public interface ITicketService
     Task<TicketDetailDto?> GetDetailAsync(int id, ClaimsPrincipal user);
     Task AddMessageAsync(int id, PostTicketMessageDto dto, ClaimsPrincipal user);
     Task<List<TicketDto>> ListMineAsync(ClaimsPrincipal user);
-    Task<List<TicketDto>> ListForStaffAsync(); 
+    Task<List<TicketDto>> ListForStaffAsync();
 }
 
 public class TicketService : ITicketService
 {
     private readonly AppDBContext _db;
     private readonly IHubContext<TicketHub> _hub;
-    public TicketService(AppDBContext db, IHubContext<TicketHub> hub) { _db = db; _hub = hub; }
+    private readonly IMailService _mail;
+    private readonly IHttpContextAccessor _http;
+    private readonly MailSettings _mailCfg;
 
-    private static int GetUserId(ClaimsPrincipal u) =>
-        int.Parse(u.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private static readonly int[] NotifyUserIds = new[] { 1, 2 };
+
+    public TicketService(
+        AppDBContext db,
+        IHubContext<TicketHub> hub,
+        IMailService mail,
+        IHttpContextAccessor http,
+        IOptions<MailSettings> mailCfg)
+    {
+        _db = db;
+        _hub = hub;
+        _mail = mail;
+        _http = http;
+        _mailCfg = mailCfg.Value;
+    }
+
+    private static int GetUserId(ClaimsPrincipal u) => int.Parse(u.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static string GetUserName(ClaimsPrincipal u) => u.Identity?.Name ?? "User";
     private static bool IsStaff(ClaimsPrincipal u) => u.IsInRole("Admin") || u.IsInRole("Manager");
+
+    private async Task<List<(int Id, string Email, string Name)>> GetNotifyRecipientsAsync(int excludeUserId = 0)
+    {
+        var list = await _db.Users
+            .Where(u => (u.RoleId == 1 || u.RoleId == 2)
+                        && u.Id != excludeUserId
+                        && !string.IsNullOrEmpty(u.Email))
+            .Select(u => new
+            {
+                u.Id,
+                u.Email,
+                Name = u.Username ?? u.Email
+            })
+            .ToListAsync();
+
+        return list.Select(x => (x.Id, x.Email, x.Name)).ToList();
+    }
+
+
+
+
+    private string BuildDeskLink(int ticketId)
+    {
+        var req = _http.HttpContext?.Request;
+        if (req is null) return $"https://johotel.mercantec.tech/ticketadmin?id={ticketId}";
+        var host = req.Host.HasValue ? req.Host.Value : "localhost";
+        var scheme = string.IsNullOrWhiteSpace(req.Scheme) ? "https" : req.Scheme;
+        return $"{scheme}://{host}/ticketadmin?id={ticketId}";
+    }
 
     public async Task<Ticket> CreateAsync(CreateTicketDto dto, ClaimsPrincipal user)
     {
         var userId = GetUserId(user);
-        var number = $"H2-{DateTime.UtcNow:yyyy}-{(await _db.Tickets.CountAsync() + 1).ToString().PadLeft(6, '0')}";
+        var userName = GetUserName(user);
+
+        var count = await _db.Tickets.CountAsync();
+        var number = $"Dit Chat ID: {(count + 1).ToString().PadLeft(6, '0')}";
 
         var t = new Ticket
         {
@@ -50,7 +102,7 @@ public class TicketService : ITicketService
         {
             Ticket = t,
             AuthorUserId = userId,
-            AuthorName = GetUserName(user),
+            AuthorName = userName,
             IsInternal = false,
             Content = dto.Description,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -58,6 +110,26 @@ public class TicketService : ITicketService
         });
 
         await _db.SaveChangesAsync();
+
+        var cust = await _db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.Email, u.Username })
+            .FirstAsync();
+
+        var deskLink = BuildDeskLink(t.Id);
+        var brand = string.IsNullOrWhiteSpace(_mailCfg.FromName) ? "JoHotel" : _mailCfg.FromName;
+
+        var recipients = await GetNotifyRecipientsAsync(excludeUserId: userId);
+        _ = _mail.SendTicketCreatedStaffAsync(
+            recipients.Select(r => r.Email),
+            t.Number, t.Title, cust.Username ?? userName, t.Department.ToString(), deskLink, brand);
+
+        if (!string.IsNullOrWhiteSpace(cust.Email))
+        {
+            _ = _mail.SendTicketCreatedUserAsync(
+                cust.Email, cust.Username ?? userName, t.Number, t.Title, deskLink, brand);
+        }
+
         return t;
     }
 
@@ -121,16 +193,20 @@ public class TicketService : ITicketService
 
     public async Task AddMessageAsync(int id, PostTicketMessageDto dto, ClaimsPrincipal user)
     {
-        var t = await _db.Tickets.FindAsync(id) ?? throw new KeyNotFoundException("Ticket");
+        var t = await _db.Tickets
+            .Include(x => x.CustomerUser)
+            .FirstOrDefaultAsync(x => x.Id == id)
+            ?? throw new KeyNotFoundException("Ticket");
 
-        var isOwner = t.CustomerUserId == GetUserId(user);
+        var authorUserId = GetUserId(user);
+        var isOwner = t.CustomerUserId == authorUserId;
         var isStaff = IsStaff(user);
         if (!isOwner && !isStaff) throw new UnauthorizedAccessException();
 
         var msg = new TicketMessage
         {
             TicketId = id,
-            AuthorUserId = GetUserId(user),
+            AuthorUserId = authorUserId,
             AuthorName = GetUserName(user),
             IsInternal = dto.IsInternal,
             Content = dto.Content,
@@ -154,6 +230,33 @@ public class TicketService : ITicketService
             Content = msg.Content,
             CreatedAtUtc = msg.CreatedAt.UtcDateTime
         });
+
+        if (dto.IsInternal) return; 
+
+        var deskLink = BuildDeskLink(t.Id);
+        var brand = string.IsNullOrWhiteSpace(_mailCfg.FromName) ? "JoHotel" : _mailCfg.FromName;
+        var preview = (dto.Content ?? string.Empty);
+        if (preview.Length > 300) preview = preview[..300] + "…";
+
+        if (isStaff)
+        {
+            if (!string.IsNullOrWhiteSpace(t.CustomerUser.Email))
+            {
+                _ = _mail.SendTicketReplyToUserAsync(
+                    t.CustomerUser.Email,
+                    t.CustomerUser.Username ?? t.CustomerUser.Email,
+                    t.Number, preview, deskLink, brand);
+            }
+        }
+        else
+        {
+            var recipients = await GetNotifyRecipientsAsync(excludeUserId: authorUserId);
+            _ = _mail.SendTicketReplyToStaffAsync(
+                recipients.Select(r => r.Email),
+                t.Number,
+                t.CustomerUser.Username ?? t.CustomerUser.Email,
+                preview, deskLink, brand);
+        }
     }
 
     public async Task<List<TicketDto>> ListMineAsync(ClaimsPrincipal user)

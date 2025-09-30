@@ -7,5 +7,5 @@ public sealed class MailSettings
     public string SmtpUsername { get; set; } = default!;
     public string SmtpPassword { get; set; } = default!;
     public string FromEmail { get; set; } = default!;
-    public string FromName { get; set; } = "H2-MAGS";
+    public string FromName { get; set; } = "JoHotel";
 }

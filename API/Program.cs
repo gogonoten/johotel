@@ -86,7 +86,6 @@ builder.Services
     });
 
 // --- CORS ---
-// For development you can keep this permissive. In production, scope it to your frontend origin.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DevAll", p => p
@@ -134,9 +133,10 @@ builder.Services.AddScoped<JwtService>();
 builder.Services.Configure<MailSettings>(builder.Configuration.GetSection("MailSettings"));
 builder.Services.AddScoped<IMailService, MailService>();
 
+builder.Services.AddHttpContextAccessor();
+
 var app = builder.Build();
 
-// --- Middleware pipeline ---
 
 if (!app.Environment.IsDevelopment())
 {
@@ -150,14 +150,11 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = string.Empty;
 });
 
-// ? CORS must run before endpoints so SignalR gets the headers
 app.UseCors("DevAll");
 
-// ? Auth before endpoints
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ? Map endpoints after middleware
 app.MapHub<TicketHub>("/api/hubs/tickets");
 app.MapControllers();
 

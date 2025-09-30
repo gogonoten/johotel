@@ -29,7 +29,7 @@
                     <strong>Live chat</strong>
                     <small class="lux-statusline">
                         <span class="lux-statusdot @( _agentOnline ? "lux-statusdot--on" : "lux-statusdot--off")" aria-hidden="true"></span>
-                        @(_agentOnline ? "JoHotel er online" : "Ingen medarbejder i chatten endnu")
+                        @(_agentOnline ? "JoHotel er online" : "Ingen medarbejder i chatten")
                     </small>
                 </div>
                 <div class="lux-chat__controls">
@@ -67,7 +67,7 @@
                         @onclick:preventDefault
                         @onclick:stopPropagation
                                 disabled="@_busy">
-                            @_busy ? "Starter…" : "Send"
+                            Send
                         </button>
 
                         @if (!string.IsNullOrWhiteSpace(_error))
@@ -128,7 +128,7 @@
                 return;
             }
 
-            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;  // /api/ i Docker
+            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;  
             var postUrl = new Uri(new Uri(apiBase), "tickets");
 
             var create = new CreateTicketDto

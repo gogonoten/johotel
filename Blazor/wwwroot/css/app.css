@@ -2787,3 +2787,251 @@ button.cal-cell {
     background: #bbb;
     box-shadow: 0 0 0 3px rgba(0,0,0,.08);
 }
+/* ================================
+   Rooms.razor.css — Folio (3-up)
+   Reuses Luxe v2 tokens & atoms
+   ================================ */
+
+/* Header */
+.folio-head {
+    background: linear-gradient(180deg,#F0E4D1 0%, #EADBC5 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 1.6rem 0 1.8rem;
+}
+
+    .folio-head .eyebrow {
+        color: var(--muted);
+        font-weight: 800;
+        letter-spacing: .18em;
+        text-transform: uppercase;
+        font-size: .78rem;
+        margin: 0 0 .35rem;
+    }
+
+    .folio-head h1 {
+        margin: .2rem 0 .2rem
+    }
+
+    .folio-head .sub {
+        margin: 0;
+        color: var(--muted)
+    }
+
+/* Grid: feature + 2 companions */
+.folio-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap: 1rem;
+}
+
+@media (max-width: 980px) {
+    .folio-grid {
+        grid-template-columns: repeat(2, minmax(0,1fr))
+    }
+}
+
+@media (max-width: 640px) {
+    .folio-grid {
+        grid-template-columns: 1fr
+    }
+}
+
+.folio-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: transform var(--speed), box-shadow var(--speed), border var(--speed);
+    display: flex;
+    flex-direction: column;
+}
+
+    .folio-card:hover {
+        transform: translateY(-3px);
+        border-color: #d9c6a6;
+        box-shadow: var(--shadow-lg);
+    }
+
+/* First card: make it the hero (you set folio-card--feature in markup) */
+.folio-card--feature {
+    grid-column: span 2;
+}
+
+@media (max-width:980px) {
+    .folio-card--feature {
+        grid-column: span 2
+    }
+}
+
+@media (max-width:640px) {
+    .folio-card--feature {
+        grid-column: auto
+    }
+}
+
+/* Media */
+.folio-media {
+    position: relative;
+    width: 100%;
+    height: 260px;
+    background-size: cover;
+    background-position: center;
+}
+
+@media (max-width:640px) {
+    .folio-media {
+        height: 220px
+    }
+}
+
+.folio-media .chip {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    padding: .35rem .6rem;
+    border-radius: 10px;
+    background: #F7F1E3;
+    color: #3f2f22;
+    font-weight: 700;
+    font-size: .82rem;
+    border: 1px solid #e6d9c6;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
+}
+
+/* Body */
+.folio-body {
+    padding: 1rem
+}
+
+.folio-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .6rem;
+    margin-bottom: .35rem;
+}
+
+.folio-title {
+    margin: 0;
+    font-size: 1.12rem;
+    font-weight: 800;
+    display: inline-flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+}
+
+.folio-roomno {
+    color: var(--muted);
+    font-weight: 700;
+    font-size: .9rem;
+}
+
+.folio-tagline {
+    margin: .2rem 0 .6rem;
+    color: var(--espresso);
+    font-weight: 600;
+}
+
+/* Mini key/value list */
+.kv.kv--mini {
+    list-style: none;
+    margin: 0 0 .6rem;
+    padding: 0;
+    display: grid;
+    gap: .25rem;
+}
+
+    .kv.kv--mini li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .8rem;
+        font-size: .95rem;
+    }
+
+    .kv.kv--mini span {
+        color: var(--muted)
+    }
+
+    .kv.kv--mini strong {
+        color: var(--espresso)
+    }
+
+/* Included perks */
+.included {
+    list-style: none;
+    margin: .4rem 0 .6rem;
+    padding: 0;
+    color: var(--muted);
+    display: grid;
+    gap: .25rem;
+}
+
+/* CTA row */
+.cta {
+    display: flex;
+    justify-content: flex-end;
+    gap: .6rem;
+    margin-top: .6rem
+}
+
+/* Button class aliases so your markup works without edits */
+.btn.outline { /* alias of .btn-outline */
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--espresso);
+    box-shadow: var(--shadow-sm);
+}
+
+    .btn.outline:hover {
+        border-color: var(--gold);
+        box-shadow: var(--shadow-md);
+        text-decoration: none
+    }
+
+.btn.gold { /* alias of .btn-gold */
+    background: linear-gradient(180deg,var(--gold) 0%, var(--gold-3) 100%);
+    color: #fff;
+    border: 1px solid transparent;
+}
+
+/* Compare strip (simple matrix) */
+.compare {
+    margin-top: 2rem
+}
+
+.compare-title {
+    margin: 0 0 .6rem;
+    text-align: center
+}
+
+.compare-grid {
+    display: grid;
+    grid-template-columns: 1fr repeat(3, minmax(0,1fr)); /* metric + up to 3 rooms */
+    gap: .6rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: .8rem;
+}
+
+    .compare-grid .metric {
+        font-weight: 900;
+        color: var(--espresso);
+    }
+
+    .compare-grid > div {
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: .5rem .6rem;
+        text-align: center;
+        font-weight: 700;
+    }
+
+/* Centered link section */
+.center {
+    text-align: center
+}

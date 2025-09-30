@@ -41,7 +41,7 @@ namespace API.Controllers
 
             var exists = await _db.Users.AnyAsync(u => u.Email == dto.Email);
             if (exists)
-                return Conflict(new { message = "Email already in use" });
+                return Conflict(new { message = "Email already in use"});
 
             var now = DateTime.UtcNow;
             var user = new User

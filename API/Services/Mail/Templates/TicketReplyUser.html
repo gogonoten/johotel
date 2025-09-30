@@ -1,0 +1,41 @@
+﻿<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8" />
+    <title>Nyt svar på {ticketNumber}</title>
+    <style>
+        body {
+            font-family: Arial,Helvetica,sans-serif;
+            background: #f4f4f4;
+            margin: 0;
+            padding: 24px
+        }
+
+        .wrap {
+            max-width: 620px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.06);
+            padding: 24px
+        }
+
+        pre {
+            white-space: pre-wrap;
+            background: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            padding: 12px
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h2>Der er kommet et svar på din sag {ticketNumber}</h2>
+        <p><b>Uddrag:</b></p>
+        <pre>{message}</pre>
+        <p><a href="{deskUrl}">Se hele tråden og svar</a></p>
+        <p style="color:#777;font-size:.9em;margin-top:20px">&copy; {currentYear} {brand}</p>
+    </div>
+</body>
+</html>

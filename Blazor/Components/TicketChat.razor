@@ -96,11 +96,12 @@
             });
 
             _subPresence = Rtc.OnAgentPresenceChanged<PresenceHub>(async p =>
-            {
-                if (p.TicketId != TicketId) return;
-                if (OnAgentPresenceChanged.HasDelegate)
-                    await OnAgentPresenceChanged.InvokeAsync(p.Count > 0);
-            });
+      {
+      if (p.TicketId != TicketId) return;
+      if (OnAgentPresenceChanged.HasDelegate)
+          await OnAgentPresenceChanged.InvokeAsync(p.StaffOnline);
+      });
+
 
             _subJoined = Rtc.OnJoined<int>(tid => Console.WriteLine($"Joined ticket:{tid}"));
             _subError = Rtc.OnError<string>(msg => Console.Error.WriteLine($"Hub error: {msg}"));

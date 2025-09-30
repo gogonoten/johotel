@@ -1,0 +1,47 @@
+﻿<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8" />
+    <title>NY SAG {ticketNumber}</title>
+    <style>
+        body {
+            font-family: Arial,Helvetica,sans-serif;
+            background: #f4f4f4;
+            margin: 0;
+            padding: 24px
+        }
+
+        .wrap {
+            max-width: 620px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.06);
+            padding: 24px
+        }
+
+        .muted {
+            color: #777;
+            font-size: .9em;
+            margin-top: 20px
+        }
+
+        .pill {
+            display: inline-block;
+            background: #eee;
+            border-radius: 12px;
+            padding: 4px 10px;
+            margin-left: 8px;
+            font-size: .85em
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h2>NY SAG {ticketNumber} <span class="pill">{department}</span></h2>
+        <p><b>Kunde:</b> {customerName}<br /><b>Titel:</b> {title}</p>
+        <p><a href="{deskUrl}">Åbn i desk</a></p>
+        <p class="muted">&copy; {currentYear} {brand}</p>
+    </div>
+</body>
+</html>
