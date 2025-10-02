@@ -56,10 +56,8 @@ public sealed class MailService : IMailService
 
     public Task SendWelcomeEmailAsync(string toEmail, string username, CancellationToken ct = default)
     {
-        var html = LoadTemplate("Welcome.html")
-            .Replace("{username}", WebUtility.HtmlEncode(username));
-
-        var text = $"Hej {username}, din konto er oprettet. Velkommen til!";
+        var html = LoadTemplate("Welcome.html").Replace("{username}", WebUtility.HtmlEncode(username));
+        var text = $"Hej {username}, din konto er oprettet. Velkommen til H2-MAGS!";
         return SendAsync(toEmail, "Velkommen til JoHotel", html, text, ct);
     }
 
@@ -92,14 +90,14 @@ Booking ID: {bookingId}";
         return SendAsync(toEmail, "Booking Bekræftelse", html, text, ct);
     }
 
-    // ===== Ticket helpers =====
-    public Task SendTicketCreatedUserAsync(string toEmail, string username, string number, string title, string deskUrl, string brand, CancellationToken ct = default)
+
+    public Task SendTicketCreatedUserAsync(string toEmail, string username, string number, string title, string linkUrl, string brand, CancellationToken ct = default)
     {
         var html = LoadTemplate("TicketCreatedUser.html")
             .Replace("{username}", WebUtility.HtmlEncode(username))
             .Replace("{ticketNumber}", WebUtility.HtmlEncode(number))
             .Replace("{title}", WebUtility.HtmlEncode(title))
-            .Replace("{deskUrl}", WebUtility.HtmlEncode(deskUrl))
+            .Replace("{deskUrl}", WebUtility.HtmlEncode(linkUrl))
             .Replace("{brand}", WebUtility.HtmlEncode(brand))
             .Replace("{currentYear}", DateTime.UtcNow.Year.ToString());
 
@@ -107,32 +105,32 @@ Booking ID: {bookingId}";
 $@"Hej {username}
 
 Din sag {number} er oprettet: {title}
-Du kan følge den her: {deskUrl}
+Du kan følge den her: {linkUrl}
 
 Vh {brand}";
         return SendAsync(toEmail, $"[{brand}] Sag oprettet {number}", html, text, ct);
     }
 
-    public Task SendTicketCreatedStaffAsync(IEnumerable<string> toEmails, string number, string title, string customerName, string department, string deskLink, string brand, CancellationToken ct = default)
+    public Task SendTicketCreatedStaffAsync(IEnumerable<string> toEmails, string number, string title, string customerName, string department, string linkUrl, string brand, CancellationToken ct = default)
         => SendToManyAsync(toEmails, $"[{brand}] NY SAG {number} · {department}",
             LoadTemplate("TicketCreatedStaff.html")
                 .Replace("{ticketNumber}", WebUtility.HtmlEncode(number))
                 .Replace("{title}", WebUtility.HtmlEncode(title))
                 .Replace("{customerName}", WebUtility.HtmlEncode(customerName))
                 .Replace("{department}", WebUtility.HtmlEncode(department))
-                .Replace("{deskUrl}", WebUtility.HtmlEncode(deskLink))
+                .Replace("{deskUrl}", WebUtility.HtmlEncode(linkUrl))
                 .Replace("{brand}", WebUtility.HtmlEncode(brand))
                 .Replace("{currentYear}", DateTime.UtcNow.Year.ToString()),
             $@"Ny sag {number} ({department}) fra {customerName}: {title}
-Åbn: {deskLink}", ct);
+Åbn: {linkUrl}", ct);
 
-    public Task SendTicketReplyToUserAsync(string toEmail, string username, string number, string messagePreview, string deskLink, string brand, CancellationToken ct = default)
+    public Task SendTicketReplyToUserAsync(string toEmail, string username, string number, string messagePreview, string linkUrl, string brand, CancellationToken ct = default)
     {
         var html = LoadTemplate("TicketReplyUser.html")
             .Replace("{username}", WebUtility.HtmlEncode(username))
             .Replace("{ticketNumber}", WebUtility.HtmlEncode(number))
             .Replace("{message}", WebUtility.HtmlEncode(messagePreview))
-            .Replace("{deskUrl}", WebUtility.HtmlEncode(deskLink))
+            .Replace("{deskUrl}", WebUtility.HtmlEncode(linkUrl))
             .Replace("{brand}", WebUtility.HtmlEncode(brand))
             .Replace("{currentYear}", DateTime.UtcNow.Year.ToString());
 
@@ -142,23 +140,23 @@ $@"Hej {username}
 Der er kommet svar på din sag {number}:
 {messagePreview}
 
-Se og svar her: {deskLink}";
+Se og svar her: {linkUrl}";
         return SendAsync(toEmail, $"[{brand}] Nyt svar på sag {number}", html, text, ct);
     }
 
-    public Task SendTicketReplyToStaffAsync(IEnumerable<string> toEmails, string number, string customerName, string messagePreview, string deskLink, string brand, CancellationToken ct = default)
+    public Task SendTicketReplyToStaffAsync(IEnumerable<string> toEmails, string number, string customerName, string messagePreview, string linkUrl, string brand, CancellationToken ct = default)
         => SendToManyAsync(toEmails, $"[{brand}] Nyt kundesvar · {number}",
             LoadTemplate("TicketReplyStaff.html")
                 .Replace("{ticketNumber}", WebUtility.HtmlEncode(number))
                 .Replace("{customerName}", WebUtility.HtmlEncode(customerName))
                 .Replace("{message}", WebUtility.HtmlEncode(messagePreview))
-                .Replace("{deskUrl}", WebUtility.HtmlEncode(deskLink))
+                .Replace("{deskUrl}", WebUtility.HtmlEncode(linkUrl))
                 .Replace("{brand}", WebUtility.HtmlEncode(brand))
                 .Replace("{currentYear}", DateTime.UtcNow.Year.ToString()),
             $@"Kunden {customerName} har svaret på sag {number}:
 {messagePreview}
 
-Åbn: {deskLink}", ct);
+Åbn: {linkUrl}", ct);
 
     private async Task SendToManyAsync(IEnumerable<string> toEmails, string subject, string html, string text, CancellationToken ct)
     {

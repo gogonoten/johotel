@@ -26,8 +26,6 @@ public class TicketService : ITicketService
     private readonly IHttpContextAccessor _http;
     private readonly MailSettings _mailCfg;
 
-    private static readonly int[] NotifyUserIds = new[] { 1, 2 };
-
     public TicketService(
         AppDBContext db,
         IHubContext<TicketHub> hub,
@@ -46,12 +44,13 @@ public class TicketService : ITicketService
     private static string GetUserName(ClaimsPrincipal u) => u.Identity?.Name ?? "User";
     private static bool IsStaff(ClaimsPrincipal u) => u.IsInRole("Admin") || u.IsInRole("Manager");
 
+    //Rolle Id'erne 1 og 2 som er admin og manager
     private async Task<List<(int Id, string Email, string Name)>> GetNotifyRecipientsAsync(int excludeUserId = 0)
     {
         var list = await _db.Users
             .Where(u => (u.RoleId == 1 || u.RoleId == 2)
                         && u.Id != excludeUserId
-                        && !string.IsNullOrEmpty(u.Email))
+                        && u.Email != null && u.Email != "")
             .Select(u => new
             {
                 u.Id,
@@ -63,16 +62,20 @@ public class TicketService : ITicketService
         return list.Select(x => (x.Id, x.Email, x.Name)).ToList();
     }
 
-
-
-
-    private string BuildDeskLink(int ticketId)
+    private string BuildStaffLink(int ticketId)
     {
         var req = _http.HttpContext?.Request;
-        if (req is null) return $"https://johotel.mercantec.tech/ticketadmin?id={ticketId}";
-        var host = req.Host.HasValue ? req.Host.Value : "localhost";
-        var scheme = string.IsNullOrWhiteSpace(req.Scheme) ? "https" : req.Scheme;
-        return $"{scheme}://{host}/ticketadmin?id={ticketId}";
+        var scheme = string.IsNullOrWhiteSpace(req?.Scheme) ? "https" : req!.Scheme;
+        var host = req?.Host.HasValue == true ? req.Host.Value : "localhost";
+        return $"{scheme}://{host}/ticketadmin/{ticketId}";
+    }
+
+    private string BuildUserLink(int ticketId)
+    {
+        var req = _http.HttpContext?.Request;
+        var scheme = string.IsNullOrWhiteSpace(req?.Scheme) ? "https" : req!.Scheme;
+        var host = req?.Host.HasValue == true ? req.Host.Value : "localhost";
+        return $"{scheme}://{host}/tickets/{ticketId}";
     }
 
     public async Task<Ticket> CreateAsync(CreateTicketDto dto, ClaimsPrincipal user)
@@ -81,7 +84,7 @@ public class TicketService : ITicketService
         var userName = GetUserName(user);
 
         var count = await _db.Tickets.CountAsync();
-        var number = $"Dit Chat ID: {(count + 1).ToString().PadLeft(6, '0')}";
+        var number = $"Chat-ID: {(count + 1).ToString().PadLeft(6, '0')}";
 
         var t = new Ticket
         {
@@ -116,18 +119,22 @@ public class TicketService : ITicketService
             .Select(u => new { u.Email, u.Username })
             .FirstAsync();
 
-        var deskLink = BuildDeskLink(t.Id);
+        var staffLink = BuildStaffLink(t.Id);
+        var userLink = BuildUserLink(t.Id);
         var brand = string.IsNullOrWhiteSpace(_mailCfg.FromName) ? "JoHotel" : _mailCfg.FromName;
 
         var recipients = await GetNotifyRecipientsAsync(excludeUserId: userId);
-        _ = _mail.SendTicketCreatedStaffAsync(
-            recipients.Select(r => r.Email),
-            t.Number, t.Title, cust.Username ?? userName, t.Department.ToString(), deskLink, brand);
+        if (recipients.Count > 0)
+        {
+            _ = _mail.SendTicketCreatedStaffAsync(
+                recipients.Select(r => r.Email),
+                t.Number, t.Title, cust.Username ?? userName, t.Department.ToString(), staffLink, brand);
+        }
 
         if (!string.IsNullOrWhiteSpace(cust.Email))
         {
             _ = _mail.SendTicketCreatedUserAsync(
-                cust.Email, cust.Username ?? userName, t.Number, t.Title, deskLink, brand);
+                cust.Email, cust.Username ?? userName, t.Number, t.Title, userLink, brand);
         }
 
         return t;
@@ -233,7 +240,8 @@ public class TicketService : ITicketService
 
         if (dto.IsInternal) return; 
 
-        var deskLink = BuildDeskLink(t.Id);
+        var staffLink = BuildStaffLink(t.Id);
+        var userLink = BuildUserLink(t.Id);
         var brand = string.IsNullOrWhiteSpace(_mailCfg.FromName) ? "JoHotel" : _mailCfg.FromName;
         var preview = (dto.Content ?? string.Empty);
         if (preview.Length > 300) preview = preview[..300] + "…";
@@ -245,17 +253,20 @@ public class TicketService : ITicketService
                 _ = _mail.SendTicketReplyToUserAsync(
                     t.CustomerUser.Email,
                     t.CustomerUser.Username ?? t.CustomerUser.Email,
-                    t.Number, preview, deskLink, brand);
+                    t.Number, preview, userLink, brand);
             }
         }
         else
         {
             var recipients = await GetNotifyRecipientsAsync(excludeUserId: authorUserId);
-            _ = _mail.SendTicketReplyToStaffAsync(
-                recipients.Select(r => r.Email),
-                t.Number,
-                t.CustomerUser.Username ?? t.CustomerUser.Email,
-                preview, deskLink, brand);
+            if (recipients.Count > 0)
+            {
+                _ = _mail.SendTicketReplyToStaffAsync(
+                    recipients.Select(r => r.Email),
+                    t.Number,
+                    t.CustomerUser.Username ?? t.CustomerUser.Email,
+                    preview, staffLink, brand);
+            }
         }
     }
 

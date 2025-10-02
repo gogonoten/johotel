@@ -10,8 +10,9 @@ public interface IMailService
         DateTime startDate, DateTime endDate, int numberOfGuests, decimal totalPrice, int bookingId,
         CancellationToken ct = default);
 
-    Task SendTicketCreatedUserAsync(string toEmail, string username, string number, string title, string deskUrl, string brand, CancellationToken ct = default);
-    Task SendTicketCreatedStaffAsync(IEnumerable<string> toEmails, string number, string title, string customerName, string department, string deskLink, string brand, CancellationToken ct = default);
-    Task SendTicketReplyToUserAsync(string toEmail, string username, string number, string messagePreview, string deskLink, string brand, CancellationToken ct = default);
-    Task SendTicketReplyToStaffAsync(IEnumerable<string> toEmails, string number, string customerName, string messagePreview, string deskLink, string brand, CancellationToken ct = default);
+    // Ticket-specific helpers
+    Task SendTicketCreatedUserAsync(string toEmail, string username, string number, string title, string linkUrl, string brand, CancellationToken ct = default);
+    Task SendTicketCreatedStaffAsync(IEnumerable<string> toEmails, string number, string title, string customerName, string department, string linkUrl, string brand, CancellationToken ct = default);
+    Task SendTicketReplyToUserAsync(string toEmail, string username, string number, string messagePreview, string linkUrl, string brand, CancellationToken ct = default);
+    Task SendTicketReplyToStaffAsync(IEnumerable<string> toEmails, string number, string customerName, string messagePreview, string linkUrl, string brand, CancellationToken ct = default);
 }
