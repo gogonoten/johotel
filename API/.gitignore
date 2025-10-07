@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs
+.env
+.vscode
+appsettings.json
+appsettings.Development.json
+
+GitHub-MCP.json
+mcp.json

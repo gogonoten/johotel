@@ -1,0 +1,87 @@
+﻿<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <title>Booking Bekræftelse</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            background: #ffffff;
+            max-width: 600px;
+            margin: 30px auto;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            color: #333;
+            text-align: center;
+        }
+
+        .details {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+
+            .details ul {
+                list-style: none;
+                padding: 0;
+            }
+
+            .details li {
+                padding: 8px 0;
+                border-bottom: 1px solid #eee;
+            }
+
+                .details li:last-child {
+                    border-bottom: none;
+                }
+
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 0.9em;
+            color: #777;
+        }
+
+        strong {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🏨 Booking Bekræftelse på vores fantastiske {roomNumber}</h2>
+        <p>Hej <strong>{username}</strong>, tak for din booking hos <strong>JoHotel</strong>!</p>
+
+        <div class="details">
+            <ul>
+                <li><strong>Info omkring dit kommende ophold.</strong></li>
+                <li><strong></strong></li>
+                <li><strong>Værelse:</strong> {roomNumber}</li>
+                <li><strong>Check-ind:</strong> {startDate}</li>
+                <li><strong>Check-ud:</strong> {endDate}</li>
+                <li><strong>Antal gæster:</strong> {numberOfGuests}</li>
+                <li><strong>Totale Pris:</strong> {totalPrice}</li>
+                <li><strong>Booking-ID:</strong> {bookingId}</li>
+                <li><strong></strong></li>
+            </ul>
+        </div>
+
+        <p style="margin-top: 20px;">Vi glæder os til at se dig og håber, du får et dejligt ophold.</p>
+
+        <div class="footer">
+            &copy; {currentYear} JoHotel – Tak fordi du bookede hos os!
+        </div>
+    </div>
+</body>
+</html>

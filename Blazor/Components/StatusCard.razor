@@ -1,0 +1,28 @@
+@using DomainModels
+
+<div class="card shadow-sm @BorderClass">
+    <div class="card-body">
+        <h5 class="card-title">
+            <i class="@IconClass"></i> @Title
+        </h5>
+        <p class="card-text">
+            @if (HealthCheck is null)
+            {
+                <span>Loader...</span>
+            }
+            else
+            {
+                <span class="fw-bold">@HealthCheck.status</span>
+                <span>-</span>
+                <span>@HealthCheck.message</span>
+            }
+        </p>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string IconClass { get; set; } = "";
+    [Parameter] public string BorderClass { get; set; } = "";
+    [Parameter] public HealthCheckResponse? HealthCheck { get; set; }
+} 

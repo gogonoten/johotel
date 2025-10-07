@@ -1,0 +1,167 @@
+﻿@page "/rooms"
+@using DomainModels
+@using System.Linq
+@inject Blazor.Services.APIService Api
+@inject NavigationManager Nav
+
+
+
+<header class="folio-head">
+    <div class="container">
+        <p class="eyebrow">❦ JoHotel</p>
+        <h1>Vores værelser</h1>
+        <p class="sub">Et hurtigt overblik over tre populære kategorier — pris, højdepunkter og næste skridt.</p>
+    </div>
+</header>
+
+<section class="container section-pad">
+    @if (loading)
+    {
+        <p class="muted">Henter værelser…</p>
+    }
+    else if (featured is null || featured.Count == 0)
+    {
+        <p class="muted">Ingen værelser at vise.</p>
+    }
+    else
+    {
+        <div class="folio-grid">
+            @for (var i = 0; i < featured.Count; i++)
+            {
+                var r = featured[i];
+                var label = r.Type.DisplayName();
+                var img = RoomHelpers.ImageFor(r.Type);
+                var price = RoomHelpers.BasePrice(r.Type).AsCurrency();
+                var peek = PeekProfile.From(label);
+                var mod = i == 0 ? " folio-card--feature" : string.Empty;
+
+                <article class=@($"folio-card{mod}")>
+                    <div class="folio-media" style="@($"background-image:url('{ImgUrl(img)}')")">
+                        <span class="chip">Fra @price / nat</span>
+                    </div>
+
+                    <div class="folio-body">
+                        <header class="folio-top">
+                            <h3 class="folio-title">@label <span class="folio-roomno">@r.RoomNumber</span></h3>
+                            @if (r.IsAvailable)
+                            {
+                                <span class="badge ok">Ledigt</span>
+                                ;
+                            }
+                            else
+                            {
+                                <span class="badge no">Optaget</span>
+                                ;
+                            }
+                        </header>
+
+                        <p class="folio-tagline">@peek.Tagline</p>
+
+                        <ul class="kv kv--mini">
+                            <li><span>Størrelse</span><strong>@peek.SizeM2 m²</strong></li>
+                            <li><span>Seng</span><strong>@peek.Bed</strong></li>
+                            <li><span>Kapacitet</span><strong>@peek.Capacity</strong></li>
+                        </ul>
+
+                        <ul class="included">
+                            @foreach (var inc in peek.Included.Take(3))
+                            {
+                                <li>✓ @inc</li>
+                            }
+                        </ul>
+
+                        <div class="cta">
+                            <a class="btn outline" href="/rooms/@r.Id">Detaljer</a>
+                        </div>
+                    </div>
+                </article>
+            }
+        </div>
+
+        <div class="compare container-narrow">
+            <div class="compare-grid">
+                <div class="metric">Pris</div>
+                @foreach (var r in featured)
+                {
+                    <div>Fra @RoomHelpers.BasePrice(r.Type).AsCurrency()</div>
+                }
+
+                <div class="metric">Størrelse</div>
+                @foreach (var r in featured)
+                {
+                    var p = PeekProfile.From(r.Type.DisplayName());
+                    <div>@p.SizeM2 m²</div>
+                }
+
+                <div class="metric">Seng</div>
+                @foreach (var r in featured)
+                {
+                    var p = PeekProfile.From(r.Type.DisplayName());
+                    <div>@p.Bed</div>
+                }
+
+                <div class="metric">Status</div>
+                @foreach (var r in featured)
+                {
+                    <div>@(r.IsAvailable ? "Ledigt" : "Optaget")</div>
+                }
+            </div>
+        </div>
+    }
+</section>
+
+<section class="container section-pad center">
+    <a class="text-link" href="/">← Til forsiden</a>
+</section>
+
+@code {
+    private List<RoomDto>? featured;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var all = await Api.GetRoomsOrEmptyAsync();
+            featured = (all ?? new List<RoomDto>()).Take(3).ToList(); 
+        }
+        catch
+        {
+            featured = new List<RoomDto>();
+        }
+        finally { loading = false; }
+    }
+
+    private string ImgUrl(string file) => $"{Nav.BaseUri}{file}";
+
+    private record PeekProfile(string Tagline, int SizeM2, string Bed, string Capacity, string[] Included)
+    {
+        public static PeekProfile From(string? display)
+        {
+            var t = (display ?? "Standard").ToLowerInvariant();
+            if (t.Contains("suite") && !t.Contains("junior"))
+                return new(
+                    Tagline: "Privat salon, håndplukkede materialer og udsigt til byens tage.",
+                    SizeM2: 68,
+                    Bed: "King-size + lounge",
+                    Capacity: "Op til 4 gæster",
+                    Included: new[] { "Hurtigt Wi‑Fi", "Nespresso & te", "Aftenopredning" }
+                );
+            if (t.Contains("junior") || t.Contains("deluxe") || t.Contains("superior") || t.Contains("medium") || t.Contains("mellem"))
+                return new(
+                    Tagline: "Ekstra plads og rolig udsigt – velegnet til længere ophold.",
+                    SizeM2: 32,
+                    Bed: "King-size / twin",
+                    Capacity: "Op til 3 gæster",
+                    Included: new[] { "Wi‑Fi", "Kaffe/te", "Opvarmet gulv" }
+                );
+            return new(
+                Tagline: "Alt du har brug for – i rolige, varme materialer.",
+                SizeM2: 24,
+                Bed: "Queen-size",
+                Capacity: "Op til 2 gæster",
+                Included: new[] { "Wi‑Fi", "Kaffe/te", "Daglig rengøring" }
+            );
+        }
+    }
+}

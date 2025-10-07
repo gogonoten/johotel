@@ -1,0 +1,49 @@
+@using DomainModels
+
+<div class="card shadow-sm mt-4">
+    <div class="card-body">
+        <h5 class="card-title">
+            <i class="bi bi-cloud-sun text-primary"></i> Vejrudsigt
+        </h5>
+        @if (WeatherForecasts is null)
+        {
+            <div>Loader vejrdata...</div>
+        }
+        else if (WeatherForecasts.Length == 0)
+        {
+            <div>Ingen vejrdata tilgængelig.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Dato</th>
+                            <th>Temperatur (°C)</th>
+                            <th>Vejrtype</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var forecast in WeatherForecasts)
+                        {
+                            <tr>
+                                <td>@forecast.Date.ToString("dd-MM-yyyy")</td>
+                                <td>
+                                    <span class="badge bg-info text-dark">
+                                        @forecast.TemperatureC
+                                    </span>
+                                </td>
+                                <td>@forecast.Summary</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public WeatherForecast[]? WeatherForecasts { get; set; }
+} 

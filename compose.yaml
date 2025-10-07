@@ -1,0 +1,44 @@
+services:
+  # API Service
+  api:
+    build:
+      context: .
+      dockerfile: API/Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+    container_name: h2-api-Johotel
+    ports:
+      - "9022:8080"
+    env_file:
+      - .env
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+      - DOTNET_RUNNING_IN_CONTAINER=true
+    networks:
+      - h2-network
+
+  # Blazor WASM App
+  blazor:
+    build:
+      context: .
+      dockerfile: Blazor/Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        VCS_REF: ${VCS_REF:-$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')}
+    container_name: h2-blazor-Johotel
+    ports:
+      - "9021:80"
+    env_file:
+      - .env
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    depends_on:
+      - api
+    networks:
+      - h2-network
+
+networks:
+  h2-network:
+    driver: bridge

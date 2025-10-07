@@ -1,0 +1,424 @@
+﻿@page "/booking"
+@using System.Net.Http.Json
+@using System.Linq
+@using DomainModels
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Blazor.Helpers
+@inject Blazor.Services.APIService Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+
+<PageTitle>Book værelse</PageTitle>
+
+@if (loading)
+{
+    <div class="booking-loader">
+        <div class="shimmer card"></div>
+        <div class="shimmer card"></div>
+        <div class="shimmer card"></div>
+    </div>
+}
+else
+{
+    <section class="hero hero--booking" style="@($"--bg:url('{SelectedRoomImage}')")">
+        <div class="hero-overlay"></div>
+        <div class="hero-inner">
+            <nav aria-label="breadcrumb" class="crumbs">
+                <a href="/">Forside</a>
+                <span aria-hidden="true">/</span>
+                <span>Booking</span>
+            </nav>
+            <h1 class="lux-brand">Book dit ophold</h1>
+            <p class="lux-pre">Elegance &amp; ro – altid inkl. morgenmad</p>
+        </div>
+    </section>
+
+    <div class="container booking-grid-outer">
+        <aside class="card type-card">
+            <div class="type-head">
+                <h3>Værelsestyper</h3>
+                <span class="pill pill--subtle">@rooms.Count() i alt</span>
+            </div>
+            <ul class="type-list">
+                @foreach (var t in RoomTypesToShow)
+                {
+                    var count = CountAvailable(t);
+                    var active = (SelectedType == t) ? "is-active" : "";
+                    <li class="type-item @active" @onclick="() => SelectTypeAsync(t)">
+                        <div class="type-thumb" style="@($"background-image:url('{ImgUrl(RoomHelpers.ImageFor(t))}')")"></div>
+                        <div class="type-meta">
+                            <div class="label">@t.DisplayName()</div>
+                            <small class="muted">@count ledige</small>
+                        </div>
+                        <div class="type-price">
+                            @RoomHelpers.BasePrice(t).AsCurrency()
+                            <span class="u-subtle">/ nat</span>
+                        </div>
+                    </li>
+                }
+            </ul>
+        </aside>
+
+        <main class="card booking-card">
+            <header class="steps">
+                <div class="step is-done">Datoer</div>
+                <div class="step @(form.RoomId > 0 ? "is-done":"")">Værelse</div>
+                <div class="step @((CanBook ? "is-ready":""))">Bekræft</div>
+            </header>
+
+            <div class="room-hero">
+                <div class="room-hero__img" style="@($"background-image:url('{SelectedRoomImage}')")"></div>
+                <div class="room-hero__meta">
+                    <h2 class="room-hero__title">
+                        @SelectedType.DisplayName()
+                        <span class="room-hero__subtitle">fra @RoomHelpers.BasePrice(SelectedType).AsCurrency() / nat</span>
+                    </h2>
+                    <div class="perkline">
+                        <span class="badge">Gratis Wi-Fi</span>
+                        <span class="badge">Morgenmad inkl.</span>
+                        <span class="badge">Sen udtjekning</span>
+                    </div>
+                </div>
+            </div>
+
+            <EditForm Model="form" OnValidSubmit="SubmitAsync" class="booking-form">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="booking-grid">
+                    <div class="form-field">
+                        <label>Check-in</label>
+                        <InputDate class="input" @bind-Value="form.CheckIn" />
+                    </div>
+                    <div class="form-field">
+                        <label>Check-out</label>
+                        <InputDate class="input" @bind-Value="form.CheckOut" />
+                    </div>
+                    <div class="form-field">
+                        <label>Værelse</label>
+                        <select class="input" @bind-value="form.RoomId" @bind-value:event="onchange">
+                            @foreach (var r in RoomsForSelectedType)
+                            {
+                                var dateBusy = IsRoomBusyForRange(r.Id, form.CheckIn, form.CheckOut);
+                                <option value="@r.Id" disabled="@(dateBusy ? true : (r.IsAvailable ? null : true))">
+                                    Værelse @r.RoomNumber @(dateBusy ? "(optaget i valgte datoer)" : (r.IsAvailable ? "" : "(optaget)"))
+                                </option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                @if (pricePreview.HasValue)
+                {
+                    <div class="total-pill">
+                        <div>
+                            <div class="muted">Estimeret total</div>
+                            <strong>@pricePreview.Value.AsCurrency()</strong>
+                        </div>
+                        <div class="muted">@Nights nat@(Nights == 1 ? "" : "ter") • @SelectedType.DisplayName()</div>
+                    </div>
+                }
+
+                <div class="form-actions">
+                    <a class="btn-outline" href="/rooms/@(form.RoomId > 0 ? form.RoomId : (RoomsForSelectedType.FirstOrDefault()?.Id ?? 0))">
+                        Se detaljer
+                    </a>
+                    <button class="btn" disabled="@(!CanBook || submitting)">
+                        @(submitting ? "Booker…" : (IsLoggedIn ? "Bekræft booking" : "Log ind for at booke"))
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(error))
+                {
+                    <p class="form-error">@error</p>
+                }
+            </EditForm>
+
+            <section class="booking-section">
+                <h3>Tilgængelighed</h3>
+                @if (form.RoomId > 0)
+                {
+                    <div class="calendar-wrap">
+                        <AvailabilityCalendar RoomId="@form.RoomId"
+                                              From="@form.CheckIn"
+                                              To="@form.CheckOut"
+                                              UseApiService="true"
+                                              OnRangePicked="HandleRangePicked" />
+                    </div>
+                }
+                else
+                {
+                    <p class="muted">Vælg et værelse for at se kalenderen.</p>
+                }
+            </section>
+
+
+
+        </main>
+
+        <aside class="card summary-card">
+            <div class="summary-head">
+                <h3>Opsummering</h3>
+                <span class="pill">@SelectedType.DisplayName()</span>
+            </div>
+
+            <ul class="kv">
+                <li><span>Check-in</span><strong>@form.CheckIn.Date.ToString("dd.MM.yyyy")</strong></li>
+                <li><span>Check-out</span><strong>@form.CheckOut.Date.ToString("dd.MM.yyyy")</strong></li>
+                <li><span>Nætter</span><strong>@Nights</strong></li>
+                <li><span>Værelse</span><strong>@($"{SelectedRoom?.RoomNumber.ToString() ?? "-"}")</strong></li>
+            </ul>
+
+            <div class="divider"></div>
+
+            <div class="pricebox">
+                <div>
+                    <span class="muted">Estimeret total</span>
+                    <div class="price-main">@((pricePreview ?? 0m).AsCurrency())</div>
+                </div>
+                <small class="muted">Inkl. moms og gebyrer</small>
+            </div>
+
+            <ul class="included">
+                <li>• Gratis Wi-Fi</li>
+                <li>• Morgenmad</li>
+                <li>• Sen udtjekning ved ledighed</li>
+            </ul>
+
+
+        </aside>
+    </div>
+}
+
+@code {
+    private List<RoomDto> rooms = new();
+    private List<MyBookingVm>? myBookings;
+    private string? error;
+
+    private RoomType SelectedType = RoomType.Standard;
+
+    private BookingDto form = new()
+        {
+            RoomId = 0,
+            CheckIn = DateTimeOffset.Now.AddDays(1),
+            CheckOut = DateTimeOffset.Now.AddDays(2)
+        };
+
+    private bool loading = true;
+    private bool submitting = false;
+    private bool IsLoggedIn = false;
+
+    private IEnumerable<RoomType> RoomTypesToShow => new[] { RoomType.Standard, RoomType.Family, RoomType.Suite };
+    private IEnumerable<RoomDto> RoomsForSelectedType => rooms.Where(r => r.Type == SelectedType).OrderBy(r => r.RoomNumber);
+    private int CountAvailable(RoomType t) => rooms.Count(r => r.Type == t && r.IsAvailable);
+
+    private RoomDto? SelectedRoom => rooms.FirstOrDefault(r => r.Id == form.RoomId);
+    private string SelectedRoomImage => ImgUrl(RoomHelpers.ImageFor(SelectedRoom?.Type ?? SelectedType));
+    private int Nights => Math.Max(0, (form.CheckOut.Date - form.CheckIn.Date).Days);
+    private decimal? pricePreview => Pricing.PriceForStay(SelectedRoom?.Type ?? SelectedType, form.CheckIn, form.CheckOut);
+
+    private readonly Dictionary<int, List<(DateTime Start, DateTime End)>> _busyCache = new();
+
+    private bool CanBook =>
+        IsLoggedIn
+        && form.RoomId > 0
+        && Nights > 0
+        && (SelectedRoom?.IsAvailable ?? true)
+        && !IsRoomBusyForRange(form.RoomId, form.CheckIn, form.CheckOut);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var token = await LocalStorage.GetItemAsync<string>("authToken");
+            IsLoggedIn = !string.IsNullOrWhiteSpace(token);
+            if (IsLoggedIn) Api.SetBearer(token);
+
+            var uri = new Uri(Nav.Uri);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            if (int.TryParse(query.Get("roomId"), out var rid))
+            {
+                form.RoomId = rid;
+            }
+            else if (Enum.TryParse<RoomType>(query.Get("type"), true, out var fromQueryType))
+            {
+                SelectedType = fromQueryType;
+            }
+
+            rooms = await Api.GetRoomsAsync() ?? new();
+
+            if (form.RoomId > 0)
+            {
+                var found = rooms.FirstOrDefault(r => r.Id == form.RoomId);
+                if (found is not null) SelectedType = found.Type;
+            }
+            else
+            {
+                var first = RoomsForSelectedType.FirstOrDefault(r => r.IsAvailable) ?? RoomsForSelectedType.FirstOrDefault();
+                if (first is not null) form.RoomId = first.Id;
+            }
+
+            await RefreshBusyForSelectedTypeAsync();
+            if (form.RoomId > 0) await EnsureBusyLoaded(form.RoomId);
+
+            if (IsLoggedIn)
+                await LoadMineAsync();
+        }
+        finally { loading = false; }
+    }
+
+    private async Task LoadMineAsync()
+    {
+        try
+        {
+            var res = await Api.GetMyBookingsAsync();
+
+            if ((int)res.StatusCode == 401 || (int)res.StatusCode == 403)
+            {
+                
+                IsLoggedIn = false;
+                myBookings = null;
+                error = "Din session er udløbet. Log ind igen for at se dine bookinger.";
+                return;
+            }
+
+            if (res.IsSuccessStatusCode)
+            {
+                myBookings = await res.Content.ReadFromJsonAsync<List<MyBookingVm>>() ?? new();
+            }
+            else
+            {
+                var txt = await res.Content.ReadAsStringAsync();
+                error = "Kunne ikke hente bookinger: " + (string.IsNullOrWhiteSpace(txt) ? res.StatusCode.ToString() : txt);
+                myBookings = new();
+            }
+        }
+        catch (Exception ex)
+        {
+            error = "Fejl ved hentning af bookinger: " + ex.Message;
+            myBookings = new();
+        }
+    }
+
+
+    private async Task SubmitAsync()
+    {
+        error = null;
+
+        if (!IsLoggedIn)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        if (!CanBook)
+        {
+            error = "Udfyld gyldige datoer og vælg et ledigt værelse.";
+            return;
+        }
+
+        submitting = true;
+        var res = await Api.CreateBookingAsync(new BookingDto
+            {
+                RoomId = form.RoomId,
+                CheckIn = form.CheckIn,
+                CheckOut = form.CheckOut
+            });
+        submitting = false;
+
+        if (res.IsSuccessStatusCode)
+        {
+            await JS.InvokeVoidAsync("confetti");
+            if (IsLoggedIn) await LoadMineAsync();
+            Nav.NavigateTo("/booking-success", forceLoad: false);
+        }
+        else
+        {
+            var msg = "Kunne ikke oprette booking.";
+            try
+            {
+                var err = await res.Content.ReadFromJsonAsync<ApiError>();
+                if (!string.IsNullOrWhiteSpace(err?.message)) msg = err!.message;
+            }
+            catch { }
+            error = msg;
+            await JS.InvokeVoidAsync("toast", msg);
+        }
+    }
+
+    private async Task HandleRangePicked((DateTimeOffset from, DateTimeOffset to) range)
+    {
+        if (range.from != default) form.CheckIn = range.from;
+        if (range.to != default) form.CheckOut = range.to;
+
+        await RefreshBusyForSelectedTypeAsync();
+        StateHasChanged();
+    }
+
+    private async Task SelectTypeAsync(RoomType t)
+    {
+        SelectedType = t;
+
+        var first = RoomsForSelectedType.FirstOrDefault(r => r.IsAvailable) ?? RoomsForSelectedType.FirstOrDefault();
+        if (first is not null) form.RoomId = first.Id;
+
+        await RefreshBusyForSelectedTypeAsync();
+        StateHasChanged();
+    }
+
+    private async Task RefreshBusyForSelectedTypeAsync()
+    {
+        _busyCache.Clear();
+        foreach (var r in RoomsForSelectedType.Take(50))
+            await EnsureBusyLoaded(r.Id);
+    }
+
+    private bool IsRoomBusyForRange(int roomId, DateTimeOffset from, DateTimeOffset to)
+    {
+        if (roomId <= 0 || from == default || to == default) return false;
+        if (!_busyCache.TryGetValue(roomId, out var spans)) return false;
+
+        var f = from.Date;
+        var t = to.Date;
+        return spans.Any(b => f < b.End && t > b.Start);
+    }
+
+    private async Task EnsureBusyLoaded(int roomId)
+    {
+        if (_busyCache.ContainsKey(roomId)) return;
+
+        try
+        {
+            var start = DateTime.Today;
+            var end = start.AddDays(28);
+            var resp = await Api.GetRoomBookedSpansAsync(
+                roomId,
+                new DateTimeOffset(start, DateTimeOffset.Now.Offset),
+                new DateTimeOffset(end, DateTimeOffset.Now.Offset)
+            ) ?? new();
+
+            var spans = resp.Select(s => (s.CheckIn.Date, s.CheckOut.Date)).ToList();
+            _busyCache[roomId] = spans;
+        }
+        catch
+        {
+            _busyCache[roomId] = new();
+        }
+    }
+
+    private string ImgUrl(string file) => $"{Nav.BaseUri}{file}";
+
+    public class MyBookingVm
+    {
+        public int Id { get; set; }
+        public int RoomId { get; set; }
+        public int RoomNumber { get; set; }
+        public DateTimeOffset CheckIn { get; set; }
+        public DateTimeOffset CheckOut { get; set; }
+        public bool IsConfirmed { get; set; }
+    }
+    public class ApiError { public string? message { get; set; } }
+}
+

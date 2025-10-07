@@ -1,0 +1,191 @@
+﻿@page "/"
+@using DomainModels
+@using System.Net
+@using System.Net.Http.Headers
+@inject Blazor.Services.APIService Api     
+@inject NavigationManager Nav
+@inject HttpClient Http                     
+@inject Blazor.Services.TicketSignalRService Rtc
+@inject IConfiguration Config           
+@inject TokenStorage Tokens                 
+
+<section class="hero-fit">
+    <img class="hero-fit__img" src="@ImgUrl("pic1.png")" alt="JoHotel – stemningsfuld lobby" />
+    <div class="hero-fit__overlay" aria-hidden="true"></div>
+
+    <div class="container hero-fit__inner">
+        <div class="lux-eyebrow" aria-hidden="true">
+            <span aria-hidden="true">❦</span>
+            Diskret luksus siden 1998
+            <span aria-hidden="true">❦</span>
+        </div>
+
+        <h1 class="lux-h1">
+            <span class="lux-pre">Velkommen til</span>
+            <span class="lux-brand">JoHotel</span>
+        </h1>
+    </div>
+</section>
+
+<section id="featured" class="section-pad">
+    <div class="container">
+        <header class="section-head">
+            <h2 class="lux-h2">Udvalgte værelser</h2>
+            <p class="section-sub">Kurateret komfort med sans for detaljer.</p>
+        </header>
+
+        @if (featured is null)
+        {
+            <p class="muted">Henter værelser…</p>
+        }
+        else if (featured.Count == 0)
+        {
+            <p class="muted">Ingen værelser at vise.</p>
+        }
+        else
+        {
+            <div class="cards">
+                @foreach (var r in featured)
+                {
+                    var price = RoomHelpers.BasePrice(r.Type);
+                    var img = RoomHelpers.ImageFor(r.Type);
+                    var label = r.Type.DisplayName();
+
+                    <article class="room-card" key="@r.Id">
+                        <div class="room-media" style="@($"background-image:url('{ImgUrl(img)}')")">
+                            <div class="room-chip">Fra @price.AsCurrency() / nat</div>
+                        </div>
+                        <div class="room-body">
+                            <h3 class="room-title">
+                                Værelse @r.RoomNumber <span class="room-type">— @label</span>
+                            </h3>
+
+                            @if (r.IsAvailable)
+                            {
+                                <span class="badge ok" title="Værelset kan bookes">Ledigt</span>
+                            }
+                            else
+                            {
+                                <span class="badge no" title="Værelser optaget">Fuldt booket</span>
+                            }
+
+                            <div class="room-actions">
+                                <a href="/rooms/@r.Id" class="btn btn-outline">Detaljer</a>
+                                @if (r.IsAvailable)
+                                {
+                                    <a href="/booking?roomId=@r.Id" class="btn btn-gold">Book nu</a>
+                                }
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+<section class="section-pad">
+    <div class="container highlights">
+        <article class="hi-card">
+            <h3>Signatur Spa</h3>
+            <p>Afstress i vores prisvindende spa med private suiter og aromatiske behandlinger.</p>
+            <a class="text-link" href="/spa">Udforsk spaen →</a>
+        </article>
+        <article class="hi-card">
+            <h3>Gastronomi</h3>
+            <p>Fra morgenbord til natmad — sæsonens råvarer og håndplukkede vine.</p>
+            <a class="text-link" href="/dining">Se dining →</a>
+        </article>
+        <article class="hi-card">
+            <h3>Særlige tilbud</h3>
+            <p>Weekend-retreats, romantiske pakker og længere ophold til fordele.</p>
+            <a class="text-link" href="/offers">Find et tilbud →</a>
+        </article>
+    </div>
+</section>
+
+@if (_chatOpen && _chatTicketId is not null)
+{
+    <div class="chat-flyout">
+        <div class="chat-flyout__head">
+            <strong>Live chat</strong>
+            <button class="btn btn-sm btn-outline" @onclick="() => _chatOpen = false">✕</button>
+        </div>
+        <div class="chat-flyout__body">
+            <TicketChat TicketId="@_chatTicketId.Value" />
+        </div>
+    </div>
+}
+
+@code {
+    private List<RoomDto>? featured;
+
+    int? _chatTicketId;
+    bool _chatOpen;
+    string _chatError = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var all = await Api.GetRoomsOrEmptyAsync();
+            featured = all.Take(3).ToList();
+        }
+        catch
+        {
+            featured = new List<RoomDto>();
+        }
+    }
+
+    async Task StartChat()
+    {
+        if (_chatOpen && _chatTicketId is not null) return; 
+        _chatError = "";
+
+        try
+        {
+            var token = await Tokens.GetTokenAsync();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+                return;
+            }
+
+            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
+            var postUrl = new Uri(new Uri(apiBase), "tickets");
+
+            var create = new CreateTicketDto
+                {
+                    Title = "Live chat",
+                    Description = "| LiveChat Påbegyndt |",
+                    Department = "Reception",
+                    Priority = TicketPriority.Normal
+                };
+
+            var req = new HttpRequestMessage(HttpMethod.Post, postUrl)
+                { Content = JsonContent.Create(create) };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var res = await Http.SendAsync(req);
+            if (res.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+                return;
+            }
+            res.EnsureSuccessStatusCode();
+
+            var dto = await res.Content.ReadFromJsonAsync<TicketDto>();
+            _chatTicketId = dto!.Id;
+
+            _chatOpen = true;
+            StateHasChanged();
+        }
+        catch
+        {
+            _chatError = "Login eller opret en bruger for at bruge LiveChatten";
+        }
+    }
+
+
+    string ImgUrl(string file) => $"{Nav.BaseUri}{file}";
+}

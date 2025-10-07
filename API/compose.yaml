@@ -1,0 +1,64 @@
+﻿version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: API/Dockerfile
+    container_name: h2-api-johotel
+    ports:
+      - "9022:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+
+      # DB & JWT
+      DATABASE_URL: "Host=ep-damp-grass-a2y11rk5-pooler.eu-central-1.aws.neon.tech;Username=neondb_owner;Password=REPLACE_ME;Database=neondb;sslmode=require"
+      Jwt__Issuer: "MyHotelApi"
+      Jwt__Audience: "MyHotelFrontend"
+      Jwt__SecretKey: 'SuperSecretKey12345678910111213141516asdfghjkl!?JakobJensen'
+
+      # LDAP / AD
+      Ldap__Server: "10.133.71.106"
+      Ldap__Port: "636"
+      Ldap__UseSsl: "true"
+      Ldap__StartTls: "false"
+      Ldap__AllowSelfSigned: "true"   # kun test; slå fra i prod
+      Ldap__SearchBase: "DC=johotel,DC=local"
+      Ldap__UserAttribute: "userPrincipalName"
+      Ldap__GroupMappings__Hotel-Admins: "Admin"
+      Ldap__GroupMappings__Hotel-Managers: "Manager"
+      Ldap__GroupMappings__Hotel-Cleaners: "Cleaner"
+      # Ikke nødvendigt med DNS/extra_hosts når du bruger IP.
+
+      # --- Mail Settings
+      MailSettings__SmtpServer: "smtp.gmail.com"
+      MailSettings__SmtpPort: "587"
+      MailSettings__SmtpUsername: "johotelsjo@gmail.com"
+      MailSettings__SmtpPassword: "ioycgshotopztbsn"   # Gmail App Password, 16 chars, NO spaces
+      MailSettings__FromEmail: "johotelsjo@gmail.com"   # must match username
+      MailSettings__FromName: "JoHotel"
+
+    restart: unless-stopped
+    networks:
+      - h2-network
+
+  blazor:
+    build:
+      context: .
+      dockerfile: Blazor/Dockerfile
+    container_name: h2-blazor-johotel
+    ports:
+      - "9021:80"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - h2-network
+
+networks:
+  h2-network:
+    driver: bridge

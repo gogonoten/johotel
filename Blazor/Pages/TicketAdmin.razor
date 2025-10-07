@@ -1,0 +1,159 @@
+﻿@page "/ticketadmin"
+@page "/ticketadmin/{SelectedId:int?}"
+@using Microsoft.AspNetCore.Components
+@using DomainModels
+@inject HttpClient Http
+@inject IConfiguration Config
+@inject TokenStorage Tokens
+@inject NavigationManager Nav
+@attribute [Authorize(Roles = "Admin,Manager")]
+
+
+<h3>Tickets</h3>
+
+<div class="row">
+    <div class="col-4">
+        <input class="form-control mb-2" placeholder="Søg..." @bind="_filter" />
+        <ul class="list-group">
+            @foreach (var t in _tickets.Where(t => string.IsNullOrWhiteSpace(_filter) || t.Title.Contains(_filter, StringComparison.OrdinalIgnoreCase)))
+            {
+                <li class="list-group-item d-flex justify-content-between align-items-center"
+                    @onclick="@(()=>SelectAndLink(t.Id))" style="cursor:pointer">
+                    <div><b>@t.Number</b><br /><small>@t.Title</small></div>
+                    <span class="badge bg-secondary">@t.Status</span>
+                </li>
+            }
+        </ul>
+    </div>
+    <div class="col-8">
+        @if (_detail is not null)
+        {
+            <h5>@_detail.Number — @_detail.Title</h5>
+            <div class="card mb-3">
+                <div class="card-body">
+                    <b>Kunde - </b> Navn: @_detail.Customer.Username | Email: (@_detail.Customer.Email) | Telefon: @_detail.Customer.PhoneNumber <br />
+                    <b>Prioritet:</b> @_detail.Priority · <b>Status:</b> @_detail.Status · <b>Emne / Afdeling:</b> @_detail.Department
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">Bookings</div>
+                <ul class="list-group list-group-flush">
+                    @foreach (var b in _detail.Bookings)
+                    {
+                        <li class="list-group-item">Værelse @b.RoomNumber (@b.RoomType) · @b.CheckIn → @b.CheckOut</li>
+                    }
+                </ul>
+            </div>
+
+            <TicketChat TicketId="@_detail.Id" />
+        }
+        else
+        {
+            <em>Vælg en ticket</em>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public int? SelectedId { get; set; }
+
+    List<TicketDto> _tickets = new();
+    TicketDetailDto? _detail;
+    string _filter = "";
+    bool _initialized = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var token = await Tokens.GetTokenAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+            return;
+        }
+
+        var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
+        var url = new Uri(new Uri(apiBase), "tickets/desk");
+
+        var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var res = await Http.SendAsync(req);
+        if (res.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            _tickets = new();
+            StateHasChanged();
+            return;
+        }
+        res.EnsureSuccessStatusCode();
+
+        _tickets = await res.Content.ReadFromJsonAsync<List<TicketDto>>() ?? new();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_initialized) return;
+
+        var id = SelectedId ?? TryReadQueryId();
+        if (id.HasValue && id.Value > 0)
+        {
+            await Select(id.Value);
+            _initialized = true;
+        }
+    }
+
+    private int? TryReadQueryId()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var q = uri.Query;
+        if (string.IsNullOrEmpty(q)) return null;
+
+        var parts = q.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var p in parts)
+        {
+            var kv = p.Split('=', 2);
+            if (kv.Length == 2 && string.Equals(kv[0], "id", StringComparison.OrdinalIgnoreCase))
+            {
+                var raw = Uri.UnescapeDataString(kv[1]);
+                if (int.TryParse(raw, out var id)) return id;
+            }
+        }
+        return null;
+    }
+
+    private async Task SelectAndLink(int id)
+    {
+        Nav.NavigateTo($"/ticketadmin/{id}", replace: false);
+        await Select(id);
+    }
+
+    async Task Select(int id)
+    {
+        var token = await Tokens.GetTokenAsync();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+            return;
+        }
+
+        var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
+        var url = new Uri(new Uri(apiBase), $"tickets/{id}");
+
+        var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var res = await Http.SendAsync(req);
+        if (res.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            _detail = null;
+            StateHasChanged();
+            return;
+        }
+        res.EnsureSuccessStatusCode();
+
+        _detail = await res.Content.ReadFromJsonAsync<TicketDetailDto>();
+        StateHasChanged();
+    }
+}

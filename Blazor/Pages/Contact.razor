@@ -1,0 +1,70 @@
+﻿@page "/contact"
+
+<PageTitle>Kontakt · JoHotel</PageTitle>
+
+<section class="container py-4">
+    <h1>Kontakt</h1>
+    <p>
+        Vi hjælper gerne – skriv, ring eller kig forbi receptionen. Vi bestræber os på at svare inden for få timer.
+    </p>
+
+    <div class="row" style="gap:1rem;">
+        <div class="col" style="min-width:280px;">
+            <h2>Oplysninger</h2>
+            <ul class="kv">
+                <li><span>E-mail</span> <strong><a href="mailto:JoHotels.Jo@gmail.com">JoHotelsJo@gmail.com</a></strong></li>
+                <li><span>Telefon</span> <strong>+45 70 22 00 11</strong></li>
+                <li><span>Adresse</span> <strong>Strandboulevarden 88, 2100 København Ø</strong></li>
+                <li><span>CVR</span> <strong>41 22 33 44</strong></li>
+                <li><span>Reception</span> <strong>Alle dage 07.00–23.00</strong></li>
+            </ul>
+        </div>
+
+        <div class="col" style="min-width:320px; flex:1;">
+            <h2>Skriv til os</h2>
+
+            <EditForm Model="_form" OnValidSubmit="Send">
+                <div class="booking-page ff">
+                    <label for="name">Navn</label>
+                    <InputText id="name" class="input" @bind-Value="_form.Name" required />
+
+                    <label for="email">E-mail</label>
+                    <InputText id="email" class="input" @bind-Value="_form.Email" type="email" required />
+
+                    <label for="subject">Emne</label>
+                    <InputText id="subject" class="input" @bind-Value="_form.Subject" />
+
+                    <label for="msg">Besked</label>
+                    <InputTextArea id="msg" class="input" rows="5" @bind-Value="_form.Message" />
+
+                    <div class="booking-page form__actions">
+                        <button class="btn" type="submit" disabled="@_sending">Send besked</button>
+                        @if (_sent)
+                        {
+                            <span class="tag">Tak – vi vender tilbage snarest</span>
+                        }
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+</section>
+
+
+@code {
+    private class ContactForm { public string? Name { get; set; } public string? Email { get; set; } public string? Subject { get; set; } public string? Message { get; set; } }
+    private ContactForm _form = new();
+    private bool _sending, _sent;
+
+    private async Task Send()
+    {
+        _sending = true;
+        try
+        {
+            await Task.Delay(600); 
+            _sent = true;
+            _form = new();
+        }
+        finally { _sending = false; }
+    }
+}

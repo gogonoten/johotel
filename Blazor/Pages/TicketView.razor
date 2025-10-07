@@ -1,0 +1,68 @@
+﻿@page "/tickets/{Id:int}"
+@using DomainModels
+@inject HttpClient Http
+@inject IConfiguration Config
+@inject TokenStorage Tokens
+@inject NavigationManager Nav
+
+<h3>Min sag</h3>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_detail is null)
+{
+    <em>Indlæser…</em>
+}
+else
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <b>@_detail.Number</b> — @_detail.Title<br />
+            <small><b>Afdeling:</b> @_detail.Department</small>
+        </div>
+    </div>
+
+    <TicketChat TicketId="@_detail.Id" />
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+    TicketDetailDto? _detail;
+    string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            var token = await Tokens.GetTokenAsync();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+                return;
+            }
+
+            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;
+            var url = new Uri(new Uri(apiBase), $"tickets/{Id}");
+
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var res = await Http.SendAsync(req);
+            if (res.StatusCode == System.Net.HttpStatusCode.Forbidden || res.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _error = "Du har ikke adgang til denne sag eller den findes ikke.";
+                return;
+            }
+            res.EnsureSuccessStatusCode();
+
+            _detail = await res.Content.ReadFromJsonAsync<TicketDetailDto>();
+        }
+        catch (Exception ex)
+        {
+            _error = "Kunne ikke indlæse sagen.";
+            Console.Error.WriteLine($"TicketView load error: {ex.Message}");
+        }
+    }
+}

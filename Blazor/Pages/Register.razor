@@ -1,0 +1,196 @@
+﻿@page "/register"
+@using System.ComponentModel.DataAnnotations
+@using DomainModels
+@inject Blazor.Services.APIService Api
+@inject NavigationManager NavManager
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@inject Blazor.Services.TokenStorage Storage
+@inject AuthenticationStateProvider AuthProvider
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Authorization
+
+@* Registrering *@
+
+<h1>Opret konto</h1>
+
+<EditForm Model="model" OnValidSubmit="HandleRegister">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="auth-card">
+        <div class="mb-3">
+            <label for="name">Navn</label>
+            <InputText id="name" class="form-control" @bind-Value="model.Name" />
+        </div>
+
+        <div class="mb-3">
+            <label for="email">E-mail</label>
+            <InputText id="email" class="form-control" @bind-Value="model.Email" />
+        </div>
+
+        <div class="mb-3">
+            <label for="phone">Telefon</label>
+            <InputText id="phone" class="form-control" @bind-Value="model.PhoneNumber" />
+        </div>
+
+        <div class="mb-3">
+            <label for="pwd">Adgangskode</label>
+            <InputText id="pwd" class="form-control" type="password" @bind-Value="model.Password" />
+        </div>
+
+        <div class="mb-3">
+            <label for="cpwd">Bekræft adgangskode</label>
+            <InputText id="cpwd" class="form-control" type="password" @bind-Value="model.ConfirmPassword" />
+        </div>
+
+        <div class="mb-3" style="display:flex;gap:.5rem;align-items:center">
+            <InputCheckbox id="terms" @bind-Value="model.AcceptTerms" />
+            <label for="terms">Jeg accepterer betingelserne</label>
+        </div>
+
+        @* Fejl/status *@
+
+        @if (!string.IsNullOrWhiteSpace(Error))
+        {
+            <div class="alert alert-danger">@Error</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Message))
+        {
+            <p class="muted">@Message</p>
+        }
+
+        <button class="btn" disabled="@Loading">Opret konto</button>
+        <p class="muted" style="margin-top:.75rem">
+            Har du allerede en konto? <a href="/login">Log ind</a>.
+        </p>
+    </div>
+</EditForm>
+
+@code {
+    private RegisterForm model = new();
+    private bool Loading;
+    private string? Error;
+    private string Message = string.Empty;
+
+    // Enkel formularmodel
+
+
+    private sealed class RegisterForm
+    {
+        [Required(ErrorMessage = "Navn er påkrævet")]
+        [StringLength(100, ErrorMessage = "Navn må højst være 100 tegn")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "E-mail er påkrævet")]
+        [EmailAddress(ErrorMessage = "Ugyldig e-mailadresse")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Telefonnummer er påkrævet")]
+        [Phone(ErrorMessage = "Ugyldigt telefonnummer")]
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Adgangskode er påkrævet")]
+        [StringLength(100, MinimumLength = 6, ErrorMessage = "Adgangskoden skal være mindst 6 tegn")]
+        public string Password { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Gentag venligst adgangskoden")]
+        [Compare(nameof(Password), ErrorMessage = "Adgangskoderne matcher ikke")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+
+        public bool AcceptTerms { get; set; }
+    }
+
+    // Submitter håndtering
+
+
+    private async Task HandleRegister()
+    {
+        Error = null; Message = string.Empty; Loading = true;
+
+        try
+        {
+            if (!model.AcceptTerms)
+            {
+                Error = "Du skal acceptere betingelserne.";
+                return;
+            }
+
+            // Opretter bruger
+            var registerRes = await Api.RegisterAsync(new RegisterDto
+                {
+                    Email = model.Email?.Trim(),
+                    Username = model.Name?.Trim(),
+                    PhoneNumber = model.PhoneNumber?.Trim(),
+                    Password = model.Password
+                });
+
+            if (!registerRes.IsSuccessStatusCode)
+            {
+                var txt = await registerRes.Content.ReadAsStringAsync();
+                Error = "Registrering mislykkedes: " + txt;
+                return;
+            }
+
+            // Forsøg automatisk login i tilfælde af at register ikke allerede returnerer token
+            string? token = null;
+
+            try
+            {
+                var regLogin = await registerRes.Content.ReadFromJsonAsync<LoginResponseDto>();
+                if (regLogin is not null && !string.IsNullOrWhiteSpace(regLogin.Token))
+                {
+                    token = regLogin.Token;
+                }
+            }
+            catch {  }
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                var loginRes = await Api.LoginAsync(new LoginDto
+                    {
+                        Email = model.Email?.Trim(),
+                        Password = model.Password
+                    });
+
+                if (!loginRes.IsSuccessStatusCode)
+                {
+                    var txt = await loginRes.Content.ReadAsStringAsync();
+                    Error = "Bruger oprettet, men auto-login mislykkedes: " + txt;
+                    NavManager.NavigateTo("/login");
+                    return;
+                }
+
+                var loginDto = await loginRes.Content.ReadFromJsonAsync<LoginResponseDto>();
+                token = loginDto?.Token;
+            }
+
+            // Ellers log ind separat
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                Error = "Bruger oprettet, men intet login-token modtaget.";
+                NavManager.NavigateTo("/login");
+                return;
+            }
+
+            // Gem token og sæt som logget ind
+            await LocalStorage.SetItemAsync("authToken", token);
+            await Storage.SetTokenAsync(token);
+            Api.SetBearer(token);
+
+            if (AuthProvider is Blazor.Services.AuthStateProvider custom)
+                await custom.MarkUserAsAuthenticatedAsync(token);
+
+            NavManager.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            Error = "Registreringsfejl: " + ex.Message;
+        }
+        finally
+        {
+            Loading = false;
+        }
+    }
+}

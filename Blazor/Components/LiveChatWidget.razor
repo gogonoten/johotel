@@ -1,0 +1,176 @@
+﻿@using DomainModels
+@inject HttpClient Http
+@inject IConfiguration Config
+@inject TokenStorage Tokens
+@inject NavigationManager Nav
+
+<div class="lux-chat">
+    @if (!_open || _minimized)
+    {
+        <button class="lux-chat__launcher"
+                @onclick="OpenOrRestore"
+                aria-label="Åbn livechat">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                <path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path>
+            </svg>
+            <span>Chat</span>
+            @if (_unread > 0)
+            {
+                <span class="lux-chat__badge">@_unread</span>
+            }
+        </button>
+    }
+
+    @if (_open && !_minimized)
+    {
+        <div class="lux-chat__panel @(_showPanel ? "lux-chat__panel--in" : "")" role="dialog" aria-label="Live chat">
+            <div class="lux-chat__head">
+                <div class="lux-chat__brand">
+                    <strong>Live chat</strong>
+                    <small class="lux-statusline">
+                        <span class="lux-statusdot @( _agentOnline ? "lux-statusdot--on" : "lux-statusdot--off")" aria-hidden="true"></span>
+                        @(_agentOnline ? "JoHotel er online" : "Ingen medarbejder i chatten")
+                    </small>
+                </div>
+                <div class="lux-chat__controls">
+                    <button class="lux-icon-btn" title="Minimér" aria-label="Minimér" @onclick="Minimize">—</button>
+                    <button class="lux-icon-btn" title="Luk" aria-label="Luk" @onclick="Close">✕</button>
+                </div>
+            </div>
+
+            <div class="lux-chat__body">
+                @if (_ticketId is null)
+                {
+                    <div class="lux-chat__start">
+                        <div class="lux-chat__intro">
+                            <h4>Velkommen 👋</h4>
+                        </div>
+
+                        <div class="lux-field">
+                            <label>Afdeling</label>
+                            <select class="lux-select" @bind="_dept">
+                                <option>Reception</option>
+                                <option>Booking</option>
+                                <option>Spa</option>
+                                <option>Restaurant</option>
+                                <option>Andet</option>
+                            </select>
+                        </div>
+
+                        <div class="lux-field">
+                            <label>Besked</label>
+                            <textarea class="lux-textarea" rows="3" placeholder="Skriv din besked…" @bind="_prefillMsg"></textarea>
+                        </div>
+
+                        <button class="lux-btn lux-btn--gold"
+                                @onclick="StartChat"
+                        @onclick:preventDefault
+                        @onclick:stopPropagation
+                                disabled="@_busy">
+                            Send
+                        </button>
+
+                        @if (!string.IsNullOrWhiteSpace(_error))
+                        {
+                            <p class="text-danger" style="margin-top:.5rem">@_error</p>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <TicketChat TicketId="@_ticketId.Value"
+                                OnAgentPresenceChanged="HandlePresenceChanged"
+                                OnInbound="HandleInbound" />
+                }
+            </div>
+
+            <div class="lux-chat__foot">
+                <small>Diskret luksus siden 1998 ❦</small>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    bool _open, _minimized, _busy, _showPanel;
+    int _unread;
+    int? _ticketId;
+    string _error = "";
+    bool _agentOnline = false;
+
+    string _dept = "Reception";
+    string _prefillMsg = "";
+
+    void OpenOrRestore()
+    {
+        _open = true; _minimized = false; _unread = 0;
+        _showPanel = false;
+        _ = Task.Run(async () => { await Task.Delay(10); _showPanel = true; await InvokeAsync(StateHasChanged); });
+    }
+
+    void Minimize() => _minimized = true;
+
+    void Close()
+    {
+        _open = false; _minimized = false;
+    }
+
+    async Task StartChat()
+    {
+        if (_busy || _ticketId is not null) { _open = true; _minimized = false; return; } 
+        _busy = true; _error = "";
+        try
+        {
+            var token = await Tokens.GetTokenAsync();
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.Uri)}");
+                return;
+            }
+
+            var apiBase = Config["ApiEndpoint"] ?? Nav.BaseUri;  
+            var postUrl = new Uri(new Uri(apiBase), "tickets");
+
+            var create = new CreateTicketDto
+                {
+                    Title = "Live chat",
+                    Description = string.IsNullOrWhiteSpace(_prefillMsg) ? "Started from widget" : _prefillMsg.Trim(),
+                    Department = _dept,
+                    Priority = TicketPriority.Normal
+                };
+
+            var req = new HttpRequestMessage(HttpMethod.Post, postUrl)
+                { Content = JsonContent.Create(create) };
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            var res = await Http.SendAsync(req);
+            res.EnsureSuccessStatusCode();
+
+            var dto = await res.Content.ReadFromJsonAsync<TicketDto>();
+            _ticketId = dto!.Id;
+
+            _prefillMsg = "";
+            _open = true; _minimized = false;
+        }
+        catch (Exception ex)
+        {
+            _error = "Kunne ikke starte chatten. Prøv igen.";
+            Console.Error.WriteLine($"LiveChatWidget StartChat error: {ex.Message}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    void HandlePresenceChanged(bool online)
+    {
+        _agentOnline = online;
+        StateHasChanged();
+    }
+
+    void HandleInbound(TicketChat.InboundMsg msg)
+    {
+        if (_minimized || !_open) _unread++;
+    }
+}

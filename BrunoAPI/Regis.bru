@@ -1,0 +1,25 @@
+meta {
+  name: Regis
+  type: http
+  seq: 2
+}
+
+post {
+  url: https://johotel.mercantec.tech/api/auth/register
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "email": "testuser321@demo.dk",
+    "username": "TestUserA",
+    "phoneNumber": "123456789",
+    "password": "Test123!!"
+  }
+  
+}
+
+settings {
+  encodeUrl: true
+}

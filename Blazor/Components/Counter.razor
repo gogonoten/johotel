@@ -1,0 +1,36 @@
+@inject IJSRuntime JSRuntime
+
+<div class="card shadow-sm mt-4 border-primary">
+    <div class="card-header bg-primary text-white">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-plus-square-fill me-2" aria-hidden="true"></i> Counter
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between">
+            <button class="btn btn-primary btn-lg shadow-sm" @onclick="IncrementCount">
+                <i class="bi bi-hand-index-thumb me-2"></i>Klik her
+            </button>
+            <div class="counter-display ms-3">
+                <span class="badge bg-primary fs-4 p-3 rounded-circle shadow">@count</span>
+            </div>
+        </div>
+        <div class="progress mt-3">
+            <div class="progress-bar bg-success" role="progressbar" style="width: @(count > 100 ? 100 : count)%" 
+                 aria-valuenow="@count" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int count = 0;
+
+    private async Task IncrementCount()
+    {
+        count++;
+        if (count == 100)
+        {
+            await JSRuntime.InvokeVoidAsync("triggerConfetti");
+        }
+    }
+} 

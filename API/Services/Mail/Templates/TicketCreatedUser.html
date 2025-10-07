@@ -1,0 +1,53 @@
+﻿<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8" />
+    <title>Sag oprettet {ticketNumber}</title>
+    <style>
+        body {
+            font-family: Arial,Helvetica,sans-serif;
+            background: #f4f4f4;
+            margin: 0;
+            padding: 24px
+        }
+
+        .wrap {
+            max-width: 620px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.06);
+            padding: 24px
+        }
+
+        h2 {
+            margin: 0 0 12px
+        }
+
+        .btn {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 10px 16px;
+            border-radius: 6px;
+            background: #222;
+            color: #fff;
+            text-decoration: none
+        }
+
+        .muted {
+            color: #777;
+            font-size: .9em;
+            margin-top: 20px
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h2>Tak {username} – din sag er oprettet</h2>
+        <p><strong>{ticketNumber}</strong> — {title}</p>
+        <p>Du kan følge status og svare i vores hjælpecenter.</p>
+        <p><a class="btn" href="{deskUrl}">Åbn din sag</a></p>
+        <p class="muted">&copy; {currentYear} {brand}</p>
+    </div>
+</body>
+</html>

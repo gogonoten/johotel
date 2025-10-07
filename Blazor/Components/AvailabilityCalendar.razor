@@ -1,0 +1,240 @@
+﻿@using System.Globalization
+@using Microsoft.AspNetCore.Components
+@using Blazor.Services
+@inject APIService Api
+
+<!-- Kalender-boksen -->
+<div class="cal card" role="grid" aria-label="Tilgængelighed">
+    <!-- Toppen: måned + farveforklaringer --> 
+    <div class="cal-head">
+        <div class="cal-month">@Start.ToString("MMMM yyyy", CultureInfo.GetCultureInfo("da-DK"))</div>
+        <div class="cal-legend">
+            <span class="pill"><span class="dot dot-free"></span>Ledig</span>
+            <span class="pill"><span class="dot dot-busy"></span>Optaget</span>
+            <span class="pill"><span class="dot dot-range"></span>Valgt interval</span>
+            <span class="pill"><span class="dot dot-today"></span>I dag</span>
+        </div>
+    </div>
+
+    <!-- Ugedage (bare overskrifter) -->
+    <div class="cal-weeknames" aria-hidden="true">
+        @foreach (var wd in WeekdayNames)
+        {
+            <div class="cal-wd">@wd</div>
+        }
+    </div>
+
+    <!-- Selve kalender-gitteret (knapper for hver dag) -->
+    <div class="cal-grid">
+        @foreach (var d in Days)
+        {
+            var state = DayState(d);
+            var cls = $"cal-cell {state}";
+            var title = TooltipFor(d, state);
+
+            <button type="button"
+                    class="@cls"
+                    title="@title"
+                    disabled="@IsPast(d)"
+                    @onclick="@(() => ClickDay(d))"
+                    aria-pressed="@IsInRange(d)">
+                <span class="cal-daynum">@d.Day</span>
+                @if (IsStart(d))
+                {
+                    <span class="cal-flag cal-flag--start">Start</span>
+                }
+                @if (IsEnd(d))
+                {
+                    <span class="cal-flag cal-flag--end">Slut</span>
+                }
+            </button>
+        }
+    </div>
+
+    <!-- Knapper nedenunder -->
+    <div class="cal-actions">
+        <div class="pill">Valgt: @(SelectedRangeText())</div>
+        <div class="cal-preset">
+            <button class="btn-outline" @onclick="() => Preset(1)">1 nat</button>
+            <button class="btn-outline" @onclick="() => Preset(2)">2 nætter</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int RoomId { get; set; }                         // Hvilket værelse vi kigger på
+    [Parameter] public DateTimeOffset From { get; set; }                // Parent nuværende check-in
+    [Parameter] public DateTimeOffset To { get; set; }                  // Parent nuværende check-out
+    [Parameter] public bool UseApiService { get; set; } = true;         // Slå API-kald til/fra (Udelukkende til at teste)
+    [Parameter] public EventCallback<(DateTimeOffset from, DateTimeOffset to)> OnRangePicked { get; set; } // Sig til når bruger har valgt
+
+    private DateTime Start => DateTime.Today;               // Vi viser 28 dage frem fra i dag
+    private DateTime End => Start.AddDays(28);              
+    private List<(DateTime Start, DateTime End)> Booked = new(); // Optagede intervaller 
+    private DateTime? selStart;                             // Brugerens valgte start dato
+    private DateTime? selEnd;                               // Brugerens valgte slut dato
+
+    // Ugedage forkortet, men start med mandag (DK-stil)
+    private static readonly string[] WeekdayNames = CultureInfo.GetCultureInfo("da-DK")
+        .DateTimeFormat.AbbreviatedDayNames
+        .Skip(1)
+        .Concat(new[] { CultureInfo.GetCultureInfo("da-DK").DateTimeFormat.AbbreviatedDayNames[0] })
+        .ToArray();
+
+    // Alle datoer vi viser i gitteret
+    private IEnumerable<DateTime> Days => Enumerable
+        .Range(0, (End - Start).Days)
+        .Select(i => Start.AddDays(i));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Hent start/slut hvis parent allerede har valgt noget
+        selStart = From == default ? null : From.DateTime.Date;
+        selEnd = To == default ? null : To.DateTime.Date;
+
+        await LoadBusyAsync();
+        StateHasChanged();
+    }
+
+    // Hent optagede perioder for rummet
+    private async Task LoadBusyAsync()
+    {
+        if (!UseApiService || RoomId <= 0)
+        {
+            Booked.Clear();
+            return;
+        }
+
+        try
+        {
+            
+            var from = new DateTimeOffset(Start, DateTimeOffset.Now.Offset);
+            var to = new DateTimeOffset(End, DateTimeOffset.Now.Offset);
+
+            var spans = await Api.GetRoomBookedSpansAsync(RoomId, from, to) ?? new();
+
+            
+            Booked = spans.Select(s => (s.CheckIn.Date, s.CheckOut.Date)).ToList();
+        }
+        catch
+        {
+            
+            Booked = new();
+        }
+    }
+
+    // Helper metoder
+    private bool IsPast(DateTime d) => d.Date < DateTime.Today;
+
+    // Tjek om dagen er midt i en optaget periode
+    private bool IsBooked(DateTime d)
+        => Booked.Any(b => d >= b.Start.Date && d < b.End.Date); 
+
+    // Tjek om dagen er inde i det valgte interval
+    private bool IsInRange(DateTime d)
+        => selStart.HasValue && selEnd.HasValue && d >= selStart.Value && d < selEnd.Value;
+
+    private bool IsStart(DateTime d) => selStart.HasValue && d.Date == selStart.Value.Date;
+    private bool IsEnd(DateTime d) => selEnd.HasValue && d.Date == selEnd.Value.Date;
+
+    // Laver CSS-klasser til cellen så vi kan style den
+    private string DayState(DateTime d)
+    {
+        var states = new List<string>();
+        if (d.Date == DateTime.Today) states.Add("is-today");
+        if (IsPast(d)) states.Add("is-past");
+        if (IsBooked(d)) states.Add("is-busy");
+        if (IsInRange(d)) states.Add("is-inrange");
+        if (IsStart(d)) states.Add("is-start");
+        if (IsEnd(d)) states.Add("is-end");
+        if (!states.Any()) states.Add("is-free");
+        return string.Join(" ", states);
+    }
+
+    // Lille tekst når man hover på titlten
+    private string TooltipFor(DateTime d, string state)
+    {
+        if (state.Contains("is-busy")) return $"{d:dd.MM}: Optaget";
+        if (state.Contains("is-inrange"))
+        {
+            if (IsStart(d)) return $"{d:dd.MM}: Start";
+            if (IsEnd(d)) return $"{d:dd.MM}: Slut";
+            return $"{d:dd.MM}: Valgt";
+        }
+        if (state.Contains("is-past")) return $"{d:dd.MM}: Tidligere dato";
+        return $"{d:dd.MM}: Ledig";
+    }
+
+    // Når man klikker på en dag i kalenderen startdato på booking
+    private async Task ClickDay(DateTime d)
+    {
+        // Man kan ikke starte på en optaget dag
+        if (IsBooked(d)) return;
+
+        // Sæt start, nulstil slut
+        if (selStart is null || (selStart.HasValue && selEnd.HasValue))
+        {
+            selStart = d.Date;
+            selEnd = null;
+        }
+        else
+        {
+            // Når man klikker på slutdato i kalendeeren
+            var a = selStart.Value.Date;
+            var b = d.Date;
+
+            // Klikker man baglæns, flyttes start automatisk
+            if (b <= a) { selEnd = null; selStart = b; StateHasChanged(); return; }
+
+            // Find første optagede dag imellem a og b (hvis nogen), så vi ikke går ind i optaget
+            var firstBusy = Enumerable.Range(0, (b - a).Days)
+                                      .Select(i => a.AddDays(i))
+                                      .FirstOrDefault(IsBooked);
+
+            var end = firstBusy != default ? firstBusy : b;
+
+            
+            selEnd = end.AddDays(1);
+            await EmitRange();
+        }
+
+        StateHasChanged();
+    }
+
+    // Fortæl parent komponent hvad der er blevet valgt
+    private async Task EmitRange()
+    {
+        if (selStart.HasValue && selEnd.HasValue)
+        {
+            var from = new DateTimeOffset(selStart.Value, DateTimeOffset.Now.Offset);
+            var to = new DateTimeOffset(selEnd.Value, DateTimeOffset.Now.Offset);
+            if (OnRangePicked.HasDelegate)
+                await OnRangePicked.InvokeAsync((from, to));
+        }
+    }
+
+    // Genvej -  sæt fx “weekend” 
+    private void Preset(int nights)
+    {
+        var start = DateTime.Today.AddDays(1);       // Lidt flinkt: start i morgen
+        selStart = start;
+        selEnd = start.AddDays(Math.Max(1, nights)); // Mindst 1 nat
+        _ = EmitRange();
+    }
+
+    // Rydder valg
+    private void ClearRange()
+    {
+        selStart = null;
+        selEnd = null;
+        _ = OnRangePicked.InvokeAsync((default, default));
+    }
+
+    // Tekst under kalenderen 
+    private string SelectedRangeText()
+    {
+        if (!selStart.HasValue || !selEnd.HasValue) return "Ingen";
+        var nights = (selEnd.Value - selStart.Value).Days;
+        return $"{selStart:dd.MM.yyyy} → {selEnd:dd.MM.yyyy} • {(nights == 1 ? "1 nat" : $"{nights} nætter")}";
+    }
+}

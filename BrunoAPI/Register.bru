@@ -1,0 +1,23 @@
+meta {
+  name: Register
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/register
+{{baseUrl}}/auth/register
+  body: json
+  {
+  "email": "testuser@demo.dk",
+  "username": "TestUser",
+  "phoneNumber": "12345678",
+  "password": "Test123!"
+}
+
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,347 @@
+﻿@page "/rooms/{id:int}"
+@using Microsoft.AspNetCore.Components
+@using DomainModels
+@inject Blazor.Services.APIService Api
+@inject NavigationManager Nav
+
+@if (room is null)
+{
+    <section class="container"><p class="muted">Henter værelse…</p></section>
+}
+else
+{
+    <section class="hero hero--booking"
+             style="@($"--bg-image:url('{ImgUrl(RoomHelpers.ImageFor(room.Type))}'); --bg-overlay:linear-gradient(0deg, rgba(47,36,29,.25), rgba(47,36,29,.25))")">
+        <div class="hero-overlay"></div>
+        <div class="hero-inner">
+            
+            <h1 class="lux-brand">Preview af Værelset</h1>
+            <p class="section-sub" style="color:#F6EBDD">
+                @room.Type.DisplayName() — Fra @RoomHelpers.BasePrice(room.Type).AsCurrency() / nat
+            </p>
+        </div>
+    </section>
+
+    <section class="container section-pad">
+        <div class="room-hero">
+            <div class="room-hero__img" style="@($"background-image:url('{ImgUrl(RoomHelpers.ImageFor(room.Type))}');")"></div>
+            <div>
+                <h2 class="room-hero__title">Elegant komfort, skræddersyet til at falde ned</h2>
+                <p class="room-hero__subtitle">@p.Tagline</p>
+
+                <div class="perkline" style="margin:.6rem 0 .9rem">
+                    @foreach (var chip in p.TopPerks)
+                    {
+                        <span class="pill">@chip</span>
+                    }
+                </div>
+
+                <div class="total-pill">
+                    <div>
+                        <div class="u-subtle">Fra</div>
+                        <div class="price-main">@RoomHelpers.BasePrice(room.Type).AsCurrency() / nat</div>
+                    </div>
+                    <div class="form-actions" style="margin:0">
+                        <a class="btn-outline" href="/">← Til forsiden</a>
+                        <a class="btn btn-gold" href="/booking?roomId=@room.Id">Book dette værelse</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        
+        <div class="cards" style="grid-template-columns: repeat(3, minmax(0,1fr)); margin-top:.8rem">
+            <div class="hi-card">
+                <h3>Specifikationer</h3>
+                <ul class="kv">
+                    <li><span class="u-subtle">Størrelse</span><strong>@p.SizeM2 m²</strong></li>
+                    <li><span class="u-subtle">Senge</span><strong>@p.Bed</strong></li>
+                    <li><span class="u-subtle">Kapacitet</span><strong>@p.Capacity</strong></li>
+                    <li><span class="u-subtle">Udsigt</span><strong>@p.View</strong></li>
+                    <li><span class="u-subtle">Etage</span><strong>@p.Floor</strong></li>
+                    <li><span class="u-subtle">Badeværelse</span><strong>@p.Bath</strong></li>
+                </ul>
+            </div>
+
+            <div class="hi-card">
+                <h3>Inkluderet i opholdet</h3>
+                <ul class="list--plain">
+                    @foreach (var inc in p.Included)
+                    {
+                        <li><span>✓</span><span>@inc</span></li>
+                    }
+                </ul>
+            </div>
+
+            <div class="hi-card">
+                <h3>Tilvalg & ekstra</h3>
+                <ul class="list--plain">
+                    @foreach (var add in p.AddOns)
+                    {
+                        <li><span>＋</span><span>@add</span></li>
+                    }
+                </ul>
+            </div>
+        </div>
+
+        
+        <div class="cards" style="grid-template-columns: 1.3fr .7fr; margin-top:1rem">
+            <article class="card booking-card">
+                <div class="steps">
+                    <span class="step is-ready">Designerinteriør</span>
+                    <span class="step is-ready">Håndsyede tekstiler</span>
+                    <span class="step is-ready">Støjsvage zoner</span>
+                </div>
+                <h2>Oplev @room.Type.DisplayName() i @p.SizeM2 m²</h2>
+                <p class="muted" style="margin-top:.35rem">
+                    @p.LongCopy
+                </p>
+
+                <h3 style="margin-top:1rem">Komfort & teknologi</h3>
+                <ul class="feature-grid">
+                    @foreach (var f in p.Features)
+                    {
+                        <li>@f</li>
+                    }
+                </ul>
+            </article>
+
+            <aside class="card summary-card">
+                <div class="summary-head">
+                    <h3 style="margin:0">Prisoversigt</h3>
+                    <span class="pill">Fleksibel</span>
+                </div>
+                <ul class="kv">
+                    <li><span>Standardrate</span><strong>@RoomHelpers.BasePrice(room.Type).AsCurrency()</strong></li>
+                    <li><span>Morgenmad</span><strong>@p.BreakfastHint</strong></li>
+                    <li><span>Afbestilling</span><strong>@p.Cancellation</strong></li>
+                </ul>
+                <div class="divider"></div>
+                <div class="pricebox">
+                    <div>
+                        <div class="u-subtle">I alt fra</div>
+                        <div class="price-main">@RoomHelpers.BasePrice(room.Type).AsCurrency() / nat</div>
+                    </div>
+                    <a class="btn btn-block" href="/booking?roomId=@room.Id">Vælg datoer</a>
+                </div>
+
+                <ul class="included">
+                    <li>Pris inkl. moms og afgifter</li>
+                    <li>Intet forudbetalt — betal ved ankomst*</li>
+                </ul>
+                <p class="u-subtle">*Gælder fleksibel pris. Se betingelser ved booking.</p>
+            </aside>
+        </div>
+
+        
+        <div class="cards" style="grid-template-columns: 1fr 1fr; margin-top:1rem">
+            <div class="card booking-card">
+                <h3>Plantegning (vejledende)</h3>
+                <div class="floorplan"></div>
+                <p class="u-subtle">Møblering og mål kan variere en smule mellem værelser.</p>
+            </div>
+
+            <div class="card booking-card">
+                <h3>Ofte stillede spørgsmål</h3>
+                <details class="acc">
+                    <summary>Er der plads til barneseng?</summary>
+                    <p>@p.FAQ_Crib</p>
+                </details>
+                <details class="acc">
+                    <summary>Kan der garanteres stille værelse?</summary>
+                    <p>@p.FAQ_Quiet</p>
+                </details>
+                <details class="acc">
+                    <summary>Er kæledyr tilladt?</summary>
+                    <p>@p.FAQ_Pets</p>
+                </details>
+                <details class="acc">
+                    <summary>Check-in / Check-out</summary>
+                    <p>@p.FAQ_Times</p>
+                </details>
+            </div>
+        </div>
+
+        
+        <div class="card booking-card" style="margin-top:1rem; text-align:center">
+            <h2>Klar til at bo luksuriøst?</h2>
+            <p class="muted">Vælg dine datoer og reserver @room.Type.DisplayName() allerede i dag.</p>
+            <div class="form-actions" style="justify-content:center">
+                <a class="btn-outline" href="/booking">Se tilgængelighed</a>
+                <a class="btn btn-gold" href="/booking?roomId=@room.Id">Book @room.Type.DisplayName()</a>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter] public int id { get; set; }
+
+    private RoomDto? room;
+    private RoomProfile p = RoomProfile.From("Standard");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        room = await Api.GetRoomAsync(id);
+        if (room is not null)
+        {
+            p = RoomProfile.From(room.Type.DisplayName());
+        }
+    }
+
+    private string ImgUrl(string file) => $"{Nav.BaseUri}{file}";
+
+    
+    public record RoomProfile(
+        string Tagline,
+        int SizeM2,
+        string Bed,
+        string Capacity,
+        string View,
+        string Floor,
+        string Bath,
+        string BreakfastHint,
+        string Cancellation,
+        string LongCopy,
+        string[] TopPerks,
+        string[] Included,
+        string[] AddOns,
+        string[] Features,
+        string FAQ_Crib,
+        string FAQ_Quiet,
+        string FAQ_Pets,
+        string FAQ_Times
+    )
+    {
+        public static RoomProfile From(string? display)
+        {
+            var t = (display ?? "Standard").ToLowerInvariant();
+
+            
+            if (t.Contains("suite") && !t.Contains("junior"))
+            {
+                return new RoomProfile(
+                    Tagline: "Privat salon, håndplukkede materialer og udsigt til byens tage.",
+                    SizeM2: 68,
+                    Bed: "King-size + separat lounge",
+                    Capacity: "Op til 4 gæster",
+                    View: "Byens tage / fransk altan",
+                    Floor: "Øvre etager",
+                    Bath: "Marmorbad med separat kar & regnbruser",
+                    BreakfastHint: "À la carte i brasseriet",
+                    Cancellation: "Gratis indtil 24 timer før ankomst",
+                    LongCopy:
+                        "Vores Suite kombinerer sofistikeret boligkomfort med hotellets forædlede service. " +
+                        "Loungeområdet inviterer til et stille glas før middagen, mens soveafsnittet er indrammet af rolige farver, kraftige tekstiler og dæmpet belysning. " +
+                        "Det generøse badeværelse i marmor fuldendes af bløde badekåber og danske spa-produkter.",
+                    TopPerks: new[] { "Separat stue", "Marmorbad", "Fransk altan" },
+                    Included: new[] {
+                        "Hurtigt Wi-Fi", "Nespresso & te", "Mineralvand dagligt",
+                        "Aftenopredning", "Luksuspleje fra danske Leif", "24/7 roomservice"
+                        },
+                    AddOns: new[] {
+                        "Privat transfer fra lufthavn", "Champagne & frugt ved ankomst", "Sen check-out (ved ledighed)"
+                        },
+                    Features: new[] {
+                        "65'' UHD-TV med casting", "Induktiv oplader ved natbord", "Skrivebord i valnød",
+                        "Klimazone med støjsvag drift", "Mørklægningsgardiner i alpine væv",
+                        "Sikkerhedsboks til laptop", "Steam-jern & bræt", "Bluetooth-højttaler"
+                        },
+                    FAQ_Crib: "Ja, vi opstiller gerne en barneseng uden beregning (for børn under 3 år).",
+                    FAQ_Quiet: "Angiv ønske ved booking; vi prioriterer endeværelser mod gård i øvre etager.",
+                    FAQ_Pets: "Velopdragne hunde under 12 kg er velkomne i udvalgte suiter mod et rengøringstillæg.",
+                    FAQ_Times: "Check-in fra kl. 15:00 og check-out kl. 12:00. Tidlig indtjekning tilbydes efter ledighed."
+                );
+            }
+            else if (t.Contains("junior") && t.Contains("suite"))
+            {
+                return new RoomProfile(
+                    Tagline: "Lille suite – stor fornemmelse. Blød lounge og generøs ro.",
+                    SizeM2: 45,
+                    Bed: "King-size",
+                    Capacity: "Op til 3 gæster",
+                    View: "Rolig gårdhave",
+                    Floor: "Mellem/øvre etager",
+                    Bath: "Regnbruser med stenfliser",
+                    BreakfastHint: "Buffet & friskpresset juice",
+                    Cancellation: "Gratis indtil 48 timer før ankomst",
+                    LongCopy:
+                        "Junior-suiten er indrettet med en diskret loungezone, hvor du kan arbejde, læse eller nyde en espresso. " +
+                        "Nøje udvalgte naturmaterialer og en varm palet skaber en afslappet klubstemning, mens akustiske løsninger sørger for fred og fokus.",
+                    TopPerks: new[] { "Lille lounge", "Stor garderobe", "Støjdæmpning" },
+                    Included: new[] {
+                        "Hurtigt Wi-Fi", "Nespresso & te", "Daglig rengøring", "Badekåbe & slippers"
+                        },
+                    AddOns: new[] {
+                        "Parkeringsservice", "Bobler på køl", "Ekstra opredning"
+                        },
+                    Features: new[] {
+                        "55'' UHD-TV med streaming", "Premium sengetøj (400TC)", "Klimaanlæg",
+                        "Arbejdspult i eg", "Regn-bruser i sten", "Minibar med lokale specialiteter"
+                        },
+                    FAQ_Crib: "Ja, én barneseng pr. værelse – skriv gerne i kommentarfeltet.",
+                    FAQ_Quiet: "Ja, junior-suiter mod gård kan ønskes og tildeles efter ledighed.",
+                    FAQ_Pets: "Kæledyr er ikke tilladt i junior-suiter.",
+                    FAQ_Times: "Check-in 15:00 / Check-out 12:00."
+                );
+            }
+            else if (t.Contains("deluxe"))
+            {
+                return new RoomProfile(
+                    Tagline: "Ekstra plads, rolig udsigt og detaljer der løfter hverdagen.",
+                    SizeM2: 32,
+                    Bed: "King-size (mulighed for twin)",
+                    Capacity: "Op til 3 gæster",
+                    View: "Gårdhave eller stille sidegade",
+                    Floor: "Mellem etager",
+                    Bath: "Regnbruser • opvarmet gulv",
+                    BreakfastHint: "Buffet med barista-kaffe",
+                    Cancellation: "Gratis indtil 48 timer før ankomst",
+                    LongCopy:
+                        "Deluxe-værelserne er skabt til længere ophold: mere gulvplads, bredt skrivebord og rummelig garderobe. " +
+                        "De varme nuancer og klassiske teksturer giver et roligt udtryk—perfekt til både arbejde og afslapning.",
+                    TopPerks: new[] { "Ekstra plads", "Arbejdspult", "Opvarmet gulv" },
+                    Included: new[] { "Wi-Fi", "Kaffe/te", "Daglig rengøring" },
+                    AddOns: new[] { "Sen afrejse", "Morgenmad", "Parkeringsplads" },
+                    Features: new[] {
+                        "50'' Smart-TV", "USB-C ved seng", "Klimaanlæg",
+                        "Rain-shower", "Sikkerhedsboks", "Minibar"
+                        },
+                    FAQ_Crib: "Ja, barneseng kan tilføjes uden beregning (ved ledighed).",
+                    FAQ_Quiet: "Vi gør vores bedste – Deluxe mod gård er et godt valg.",
+                    FAQ_Pets: "Kæledyr er ikke tilladt i Deluxe.",
+                    FAQ_Times: "Check-in 15:00 / Check-out 11:00."
+                );
+            }
+            else
+            {
+                
+                return new RoomProfile(
+                    Tagline: "Alt du har brug for – i rolige, varme materialer.",
+                    SizeM2: 24,
+                    Bed: "Queen-size",
+                    Capacity: "Op til 2 gæster",
+                    View: "By eller gård (tilfældig tildeling)",
+                    Floor: "Forskellige etager",
+                    Bath: "Kompakt bad med regnbruser",
+                    BreakfastHint: "Tilvalg ved booking",
+                    Cancellation: "Gratis indtil 72 timer før ankomst",
+                    LongCopy:
+                        "Vores Standard værelser samler kvalitet og enkelhed: støjsvag ventilation, bløde metervarer og funktionelle detaljer. " +
+                        "Et ideelt udgangspunkt for oplevelser i byen.",
+                    TopPerks: new[] { "Regnbruser", "Kvalitetssengelinned", "Sort kaffe & te" },
+                    Included: new[] { "Wi-Fi", "Kaffe/te", "Daglig rengøring" },
+                    AddOns: new[] { "Morgenmad", "Tidlig check-in", "Sen check-out" },
+                    Features: new[] {
+                        "43'' Smart-TV", "USB-opladning", "Skrivebord",
+                        "Mørklægning", "Individuel temperaturstyring"
+                        },
+                    FAQ_Crib: "Standard-værelser har ikke plads til ekstra seng, men baby-rejsecrib er muligt ved forespørgsel.",
+                    FAQ_Quiet: "Ja—skriv ønsket i kommentarfeltet, så forsøger vi at placere dig mod gård.",
+                    FAQ_Pets: "Kæledyr er ikke tilladt i Standard-kategorien.",
+                    FAQ_Times: "Check-in 15:00 / Check-out 11:00."
+                );
+            }
+        }
+    }
+}

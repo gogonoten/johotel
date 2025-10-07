@@ -1,0 +1,431 @@
+﻿@page "/user"
+@using System.ComponentModel.DataAnnotations
+@using System.Net.Http.Json
+@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Authorization
+@using DomainModels
+@attribute [Authorize]
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@inject Blazor.Services.APIService Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>Min profil</PageTitle>
+
+@if (loading)
+{
+    <div class="booking-loader">
+        <div class="shimmer"></div>
+        <div class="shimmer"></div>
+        <div class="shimmer"></div>
+    </div>
+}
+else
+{
+    <header class="hero hero--user" style="--bg: linear-gradient(0deg, rgba(47,36,29,.34), rgba(47,36,29,.34)), url('/img/hero-user.jpg');">
+        <div class="hero-overlay"></div>
+        <div class="hero-inner">
+            <nav class="crumbs" aria-label="Brødkrumme">
+                <a href="/">Forside</a><span>/</span><span>Min profil</span>
+            </nav>
+            <h1 class="lux-brand">Velkommen, @DisplayName()</h1>
+            <p class="section-sub" style="color:#F6EBDD">Se dine oplysninger, skift adgangskode og styr dine bookninger</p>
+        </div>
+    </header>
+
+    <div class="container section-pad user-grid">
+        <main class="user-main">
+            <section class="card type-card">
+                <header class="type-head">
+                    <h2 class="room-title">Mine oplysninger</h2>
+                </header>
+
+                @if (!IsLoggedIn)
+                {
+                    <div class="auth-card">
+                        <h3>Du er ikke logget ind</h3>
+                        <p class="muted">Log ind for at se og redigere din profil.</p>
+                        <a class="btn" href="/login">Log ind</a>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(error))
+                {
+                    <div role="alert" class="alert">
+                        <strong>Ups!</strong> @error
+                    </div>
+                }
+                else
+                {
+                    <EditForm Model="@profileForm" OnValidSubmit="@SaveProfileAsync">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <div class="form-grid">
+                            <div>
+                                <label for="email">Email</label>
+                                <InputText id="email" class="input" @bind-Value="profileForm.Email" />
+                            </div>
+                            <div>
+                                <label for="username">Brugernavn</label>
+                                <InputText id="username" class="input" @bind-Value="profileForm.Username" />
+                            </div>
+                            <div>
+                                <label for="phone">Telefon</label>
+                                <InputText id="phone" class="input" @bind-Value="profileForm.PhoneNumber" />
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn" disabled="@savingProfile">
+                                @(savingProfile ? "Gemmer…" : "Gem ændringer")
+                            </button>
+                            <button type="button" class="btn-outline" @onclick="ResetProfile" disabled="@savingProfile">
+                                Nulstil
+                            </button>
+                        </div>
+                    </EditForm>
+
+                    <ul class="kv kv--meta" aria-label="Meta">
+                        <li><span class="u-subtle">Sidst opdateret</span><strong>@lastLoaded.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</strong></li>
+                        <li><span class="u-subtle">Login-status</span><strong>@(IsLoggedIn ? "Aktiv" : "Ikke logget ind")</strong></li>
+                    </ul>
+                }
+            </section>
+
+            <section class="card type-card">
+                <header class="type-head">
+                    <h2 class="room-title">Skift adgangskode</h2>
+                    <span class="u-subtle">Hold din konto sikker</span>
+                </header>
+
+                <EditForm Model="@passwordForm" OnValidSubmit="@ChangePasswordAsync">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="form-grid">
+                        <div>
+                            <label for="cur">Nuværende adgangskode</label>
+                            <InputText id="cur" type="password" class="input" @bind-Value="passwordForm.CurrentPassword" />
+                        </div>
+                        <div>
+                            <label for="new">Ny adgangskode</label>
+                            <InputText id="new" type="password" class="input" @bind-Value="passwordForm.NewPassword" />
+                            <small class="u-subtle">Mindst 6 tegn, gerne en sætning</small>
+                        </div>
+                        <div>
+                            <label for="conf">Gentag ny adgangskode</label>
+                            <InputText id="conf" type="password" class="input" @bind-Value="passwordForm.ConfirmNewPassword" />
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-gold" disabled="@changingPw">
+                            @(changingPw ? "Opdaterer…" : "Opdater adgangskode")
+                        </button>
+                    </div>
+                </EditForm>
+            </section>
+        </main>
+
+        <aside class="user-aside" aria-label="Hurtige handlinger">
+            <section class="card quick">
+                <h3 class="room-title">Genveje</h3>
+                <div class="quick-grid">
+                    <a class="quick-btn" href="/mybookings"><span class="quick-ico">📖</span><span>Mine bookninger</span></a>
+                    <a class="quick-btn" href="/offers"><span class="quick-ico">🎁</span><span>Eksklusive tilbud</span></a>
+                    <a class="quick-btn" href="/spa"><span class="quick-ico">💆</span><span>Book spa</span></a>
+                    <a class="quick-btn" href="/dining"><span class="quick-ico">🍽️</span><span>Reserver bord</span></a>
+                </div>
+                <div class="sep"></div>
+                <button class="btn-outline full" @onclick="GoBookings">Se alle bookninger</button>
+                <button class="btn-danger full" @onclick="Logout">Log ud</button>
+            </section>
+
+            <section class="card note">
+                <h3 class="room-title">Sikkerhedstip</h3>
+                <p class="muted">Genbrug ikke samme kode på flere sider. Overvej en password-manager.</p>
+            </section>
+        </aside>
+    </div>
+}
+
+@code {
+    private bool loading = true;
+    private bool savingProfile;
+    private bool changingPw;
+
+    private bool IsLoggedIn;
+    private string? error;
+    private DateTimeOffset lastLoaded;
+
+    private UserProfileVm profile = new();
+    private ProfileForm profileForm = new();
+    private PasswordForm passwordForm = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var token = await LocalStorage.GetItemAsync<string>("authToken");
+            IsLoggedIn = !string.IsNullOrWhiteSpace(token);
+            if (!IsLoggedIn) { loading = false; return; }
+
+            Api.SetBearer(token!);
+            await LoadAsync();
+        }
+        finally { loading = false; }
+    }
+
+    private async Task LoadAsync()
+    {
+        error = null;
+        try
+        {
+            var res = await Api.GetMeAsync();
+            if ((int)res.StatusCode == 401 || (int)res.StatusCode == 403)
+            {
+                IsLoggedIn = false;
+                error = "Din session er udløbet. Log ind igen.";
+                return;
+            }
+
+            if (!res.IsSuccessStatusCode)
+            {
+                var txt = await res.Content.ReadAsStringAsync();
+                error = "Kunne ikke hente profil: " + (string.IsNullOrWhiteSpace(txt) ? res.StatusCode.ToString() : txt);
+                return;
+            }
+
+            var me = await res.Content.ReadFromJsonAsync<UserProfileVm>() ?? new();
+            profile = me;
+            profileForm = new ProfileForm
+                {
+                    Email = me.Email ?? string.Empty,
+                    Username = me.Username ?? string.Empty,
+                    PhoneNumber = me.PhoneNumber ?? string.Empty,
+                    Role = me.Role ?? "Bruger"
+                };
+            lastLoaded = DateTimeOffset.Now;
+        }
+        catch (Exception ex) { error = "Fejl ved hentning af profil: " + ex.Message; }
+    }
+
+    private static async Task<string> GetApiMessageAsync(HttpResponseMessage res)
+    {
+        var txt = await res.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(txt)) return res.ReasonPhrase ?? "Ukendt fejl";
+        try
+        {
+            using var doc = JsonDocument.Parse(txt);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String)
+                return m.GetString()!;
+
+            if (root.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String)
+            {
+                var title = t.GetString();
+                if (root.TryGetProperty("detail", out var d) && d.ValueKind == JsonValueKind.String)
+                    return $"{title}: {d.GetString()}";
+                return title ?? "Ugyldig forespørgsel";
+            }
+
+            if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in errors.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind == JsonValueKind.Array && prop.Value.GetArrayLength() > 0)
+                        return prop.Value[0].GetString() ?? "Valideringsfejl";
+                }
+            }
+        }
+        catch { }
+        return txt;
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        savingProfile = true;
+        try
+        {
+            var dto = new UpdateProfileDto
+                {
+                    Email = profileForm.Email?.Trim() ?? "",
+                    Username = profileForm.Username?.Trim() ?? "",
+                    PhoneNumber = profileForm.PhoneNumber?.Trim() ?? ""
+                };
+
+            var res = await Api.UpdateProfileAsync(dto);
+            var body = await res.Content.ReadAsStringAsync();
+
+            if (res.IsSuccessStatusCode)
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("token", out var t))
+                    {
+                        var newToken = t.GetString();
+                        if (!string.IsNullOrWhiteSpace(newToken))
+                        {
+                            await LocalStorage.SetItemAsync("authToken", newToken);
+                            Api.SetBearer(newToken);
+
+                            if (AuthState is Blazor.Services.AuthStateProvider custom)
+                                await custom.MarkUserAsAuthenticatedAsync(newToken);
+                        }
+                    }
+                }
+                catch { }
+
+                await LoadAsync();
+
+                await JS.InvokeVoidAsync("toast", "Profil opdateret.");
+            }
+            else
+            {
+                var msg = await GetApiMessageAsync(res); 
+                await JS.InvokeVoidAsync("toast", msg);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("toast", ex.Message);
+        }
+        finally
+        {
+            savingProfile = false;
+        }
+    }
+
+
+    private void ResetProfile()
+    {
+        profileForm = new ProfileForm
+            {
+                Email = profile.Email ?? string.Empty,
+                Username = profile.Username ?? string.Empty,
+                PhoneNumber = profile.PhoneNumber ?? string.Empty,
+                Role = profile.Role ?? "Bruger"
+            };
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        if (passwordForm.NewPassword != passwordForm.ConfirmNewPassword)
+        {
+            await JS.InvokeVoidAsync("toast", "De nye adgangskoder er ikke ens.");
+            return;
+        }
+
+        changingPw = true;
+        try
+        {
+            var res = await Api.ChangePasswordAsync(new ChangePasswordDto
+                {
+                    CurrentPassword = (passwordForm.CurrentPassword ?? string.Empty).Trim(),
+                    NewPassword = (passwordForm.NewPassword ?? string.Empty).Trim()
+                });
+
+            var body = await res.Content.ReadAsStringAsync();
+
+            if (res.IsSuccessStatusCode)
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("token", out var t))
+                    {
+                        var newToken = t.GetString();
+                        if (!string.IsNullOrWhiteSpace(newToken))
+                        {
+                            await LocalStorage.SetItemAsync("authToken", newToken);
+                            Api.SetBearer(newToken);
+
+                            if (AuthState is Blazor.Services.AuthStateProvider custom)
+                                await custom.MarkUserAsAuthenticatedAsync(newToken);
+                        }
+                    }
+                }
+                catch { }
+
+                passwordForm = new(); 
+                await JS.InvokeVoidAsync("toast", "Adgangskode opdateret.");
+            }
+            else
+            {
+                var msg = await GetApiMessageAsync(res);
+                await JS.InvokeVoidAsync("toast", msg);
+            }
+        }
+        catch (Exception ex) { await JS.InvokeVoidAsync("toast", ex.Message); }
+        finally { changingPw = false; }
+    }
+
+    private void GoBookings() => Nav.NavigateTo("/mybookings");
+
+    private async Task Logout()
+    {
+        // Fjerner og Sætter token til null i API servicen så den ikke længere sender token med
+        Api.SetBearer(null);
+
+        // Fjerner den aktive token fra localStorage så der kan logges ind med en anden bruger
+        await LocalStorage.RemoveItemAsync("authToken");
+
+
+        // Opdaterer AuthStateProvider så resten af appen fatter at brugeren er logget ud
+        if (AuthState is Blazor.Services.AuthStateProvider custom)
+        {
+            await custom.MarkUserAsLoggedOutAsync();
+        }
+
+        
+        IsLoggedIn = false;
+        profile = new();
+        profileForm = new();
+        passwordForm = new();
+
+        await JS.InvokeVoidAsync("toast", "Du er nu logget ud.");
+        Nav.NavigateTo("/"); //Redirect til forsiden
+    }
+
+
+    private string DisplayName()
+    {
+        if (!string.IsNullOrWhiteSpace(profile.Username)) return profile.Username!;
+        if (!string.IsNullOrWhiteSpace(profile.Email)) return profile.Email!;
+        return "Gæst";
+    }
+
+    public class ProfileForm
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [Required, MinLength(2)]
+        public string Username { get; set; } = string.Empty;
+
+        [Required, MinLength(8)]
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        public string Role { get; set; } = "Bruger";
+    }
+
+    public class PasswordForm
+    {
+        [Required] public string CurrentPassword { get; set; } = string.Empty;
+        [Required, MinLength(6)] public string NewPassword { get; set; } = string.Empty;
+        [Required] public string ConfirmNewPassword { get; set; } = string.Empty;
+    }
+
+    public class UserProfileVm
+    {
+        public int Id { get; set; }
+        public string? Email { get; set; }
+        public string? Username { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Role { get; set; }
+    }
+}

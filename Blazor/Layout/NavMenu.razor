@@ -1,0 +1,135 @@
+﻿@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager NavManager
+
+<header class="nav">
+    <div class="nav-inner container">
+        <a class="brand" href="/" aria-label="JoHotel forside">
+            <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <defs>
+                    <linearGradient id="ghead" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#E8E0D5" />
+                        <stop offset="100%" stop-color="#C8A96B" />
+                    </linearGradient>
+                </defs>
+                <circle cx="18" cy="18" r="16" stroke="url(#ghead)" stroke-width="1.5" />
+                <path d="M10 22c3.8-1.2 7.2-6.2 8.1-12.1 1 5.9 4.3 10.9 8.1 12.1-3.5.9-7.1 4.2-8.1 8.1-1-3.9-4.6-7.2-8.1-8.1Z"
+                      stroke="url(#ghead)" stroke-width="1.1" fill="none" />
+            </svg>
+            <span class="brand-text">JoHotel</span>
+        </a>
+
+        <nav class="links @(isOpen ? "open" : string.Empty)">
+            <NavLink href="/" Match="NavLinkMatch.All">Forside</NavLink>
+            <NavLink href="/rooms">Værelser</NavLink>
+            <NavLink href="/dining">Dining</NavLink>
+            <NavLink href="/spa">Spa</NavLink>
+            <NavLink href="/about">Om os</NavLink>
+        </nav>
+
+        <div class="actions">
+            <AuthorizeView>
+                <NotAuthorized>
+                    <a class="btn-outline" href="/login">Log ind</a>
+                </NotAuthorized>
+
+                <Authorized Context="auth">
+                    @{
+                        var user = auth.User;
+
+                        string displayName =
+                        user?.FindFirst("name")?.Value
+                        ?? user?.FindFirst("unique_name")?.Value
+                        ?? user?.FindFirst("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name")?.Value
+                        ?? user?.Identity?.Name
+                        ?? "Min profil";
+
+                        var roleId = user?.FindFirst("role_id")?.Value
+                        ?? user?.FindFirst("roleId")?.Value; 
+                        bool showStaff = roleId == "1" || roleId == "2";
+
+                        if (!showStaff)
+                        {
+                            showStaff = user?.IsInRole("Admin") == true || user?.IsInRole("Staff") == true;
+                        }
+                    }
+
+                    <a class="btn-outline" href="/mybookings">Mine bookninger</a>
+
+                    @if (showStaff)
+                    {
+                        <div class="staff-menu" @onkeydown="HandleStaffMenuKeys">
+                            <button class="btn-outline staff-toggle"
+                                    aria-haspopup="true"
+                                    aria-expanded="@_staffOpen"
+                                    @onclick="ToggleStaffMenu">
+                                Personale
+                                <span class="chev">@(_staffOpen ? "▴" : "▾")</span>
+                            </button>
+
+                            @if (_staffOpen)
+                            {
+                                <div class="staff-overlay" @onclick="CloseStaffMenu"></div>
+
+                                <div class="staff-dropdown" role="menu">
+                                    <a class="staff-item" href="/personale" role="menuitem">
+                                        <span>Oversigt</span><small>Hurtigt overblik</small>
+                                    </a>
+                                    <a class="staff-item" href="/ticketadmin" role="menuitem">
+                                        <span>Ticketdesk</span><small>Håndter sager & chat</small>
+                                    </a>
+
+                                    <hr class="staff-sep" />
+
+                                    <a class="staff-item" href="/personale/bookings" role="menuitem">
+                                        <span>Bookinger</span><small>Søg & redigér</small>
+                                    </a>
+                                    <a class="staff-item" href="/personale/rooms" role="menuitem">
+                                        <span>Værelser</span><small>Tildel & status</small>
+                                    </a>
+                                    <a class="staff-item" href="/personale/guests" role="menuitem">
+                                        <span>Gæster</span><small>Opslag & kontakt</small>
+                                    </a>
+
+                                    <hr class="staff-sep" />
+
+                                    <a class="staff-item" href="/personale/reports" role="menuitem">
+                                        <span>Rapporter</span><small>Belægning & omsætning</small>
+                                    </a>
+                                    <a class="staff-item" href="/personale/settings" role="menuitem">
+                                        <span>Indstillinger</span><small>Roller & adgang</small>
+                                    </a>
+                                </div>
+                            }
+                        </div>
+                    }
+
+
+
+                    <a class="btn btn-gold" href="/user">@displayName</a>
+                </Authorized>
+            </AuthorizeView>
+
+            <button class="hamburger" @onclick="ToggleMenu" aria-label="Åbn/luk menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </div>
+</header>
+
+@code {
+    private bool isOpen;
+    void ToggleMenu() => isOpen = !isOpen;
+
+    bool _staffOpen = false;
+
+    void ToggleStaffMenu() => _staffOpen = !_staffOpen;
+    void CloseStaffMenu() => _staffOpen = false;
+
+    void HandleStaffMenuKeys(KeyboardEventArgs e)
+    {
+        if (e.Key is "Escape" or "Esc") _staffOpen = false;
+    }
+
+}

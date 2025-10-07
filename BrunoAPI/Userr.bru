@@ -1,0 +1,19 @@
+meta {
+  name: Userr
+  type: http
+  seq: 3
+}
+
+get {
+  url: https://johotel.mercantec.tech/api/bookings
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: SuperSecretKey12345678910111213141516asdfghjkl!?JakobJensen
+}
+
+settings {
+  encodeUrl: true
+}

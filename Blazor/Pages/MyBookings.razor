@@ -1,0 +1,295 @@
+﻿@page "/mybookings"
+@using System.Net.Http.Json
+@using System.Linq
+@using Microsoft.AspNetCore.Components
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
+@inject Blazor.Services.APIService Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Mine bookinger</PageTitle>
+
+@if (loading)
+{
+    <div class="booking-loader">
+        <div class="shimmer"></div>
+        <div class="shimmer"></div>
+        <div class="shimmer"></div>
+    </div>
+}
+else
+{
+    
+    <header class="hero hero--booking" style="--bg: linear-gradient(0deg, rgba(47,36,29,.25), rgba(47,36,29,.25)), url('/img/hero-bookings.jpg');">
+        <div class="hero-overlay"></div>
+        <div class="hero-inner">
+            <nav class="crumbs" aria-label="Brødkrumme">
+                <a href="/">Forside</a><span>/</span><span>Mine bookinger</span>
+            </nav>
+            <h1 class="lux-brand">Dine reservationer</h1>
+            <p class="section-sub" style="color:#F6EBDD">Administrér dine ophold med ro i maven</p>
+        </div>
+    </header>
+
+    <div class="container section-pad">
+        <div class="booking-grid-outer">
+            
+            <aside class="card type-card" aria-label="Filtrér">
+                <h2 class="room-title" style="margin-bottom:.4rem">Filtrér</h2>
+
+                <div class="seg" role="tablist" aria-label="Visning">
+                    <button role="tab"
+                            class="seg__btn @(showUpcoming ? "is-active" : null)"
+                            aria-selected="@showUpcoming"
+                            @onclick="ShowUpcoming">
+                        Kommende
+                    </button>
+                    <button role="tab"
+                            class="seg__btn @(!showUpcoming ? "is-active" : null)"
+                            aria-selected="@(!showUpcoming)"
+                            @onclick="ShowPast">
+                        Tidligere
+                    </button>
+                </div>
+
+                <label for="søg" class="u-subtle">Søg</label>
+                <input id="søg" class="input" @bind="search" placeholder="Søg efter værelse eller dato…" />
+
+                <div class="pill pill--subtle" style="margin-top:.6rem">
+                    Tip: Klik “Book igen” for at gentage et ophold
+                </div>
+            </aside>
+
+            
+            <main>
+                @if (!IsLoggedIn)
+                {
+                    <section class="card auth-card" style="max-width:560px">
+                        <h3>Du er ikke logget ind</h3>
+                        <p class="muted">Log ind for at se dine bookinger.</p>
+                        <a class="btn" href="/login">Log ind</a>
+                    </section>
+                }
+                else if (error is not null)
+                {
+                    <section class="card auth-card" role="alert" style="border-color:#F3C1C1">
+                        <h3>Noget gik galt</h3>
+                        <p>@error</p>
+                    </section>
+                }
+                else if (bookings is null)
+                {
+                    <div class="booking-loader">
+                        <div class="shimmer"></div>
+                        <div class="shimmer"></div>
+                    </div>
+                }
+                else
+                {
+                    var filtered = FilteredBookings();
+                    if (filtered.Count == 0)
+                    {
+                        <section class="card auth-card" style="text-align:center">
+                            <h3>Ingen resultater</h3>
+                            <p class="muted">Ingen bookinger matcher din filtrering.</p>
+                            <a class="btn-outline" href="/booking">Book et ophold</a>
+                        </section>
+                    }
+                    else
+                    {
+                        <div class="cards" style="grid-template-columns:1fr">
+                            @foreach (var b in filtered)
+                            {
+                                var upcoming = b.CheckIn.Date >= DateTimeOffset.Now.Date;
+
+                                <article class="card booking-card booking-item @(upcoming ? "is-upcoming" : "is-past")">
+                                    <div class="booking-item__bar"></div>
+
+                                    <header class="type-head" style="border:none; padding:0 0 .2rem">
+                                        <div class="room-title" style="margin:0">
+                                            <span class="pill">Værelse @b.RoomNumber</span>
+                                            @if (upcoming)
+                                            {
+                                                <span class="u-subtle">Kommende</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="u-subtle">Afsluttet</span>
+                                            }
+                                        </div>
+
+                                        <span class="@(b.IsConfirmed ? "badge ok" : "badge")">
+                                            @(b.IsConfirmed ? "Bekræftet" : "Afventer")
+                                        </span>
+                                    </header>
+
+                                    <ul class="kv" aria-label="Bookingdetaljer">
+                                        <li><span class="u-subtle">Check-in</span><strong>@b.CheckIn.ToLocalTime().Date.ToString("dd.MM.yyyy")</strong></li>
+                                        <li><span class="u-subtle">Check-out</span><strong>@b.CheckOut.ToLocalTime().Date.ToString("dd.MM.yyyy")</strong></li>
+                                        <li><span class="u-subtle">Nætter</span><strong>@((b.CheckOut.Date - b.CheckIn.Date).Days)</strong></li>
+                                    </ul>
+
+                                    <div class="room-actions">
+                                        <a class="btn-outline" href="/booking?roomId=@b.RoomId">Book igen</a>
+                                        @if (upcoming)
+                                        {
+                                            <button class="btn btn-danger" @onclick="(() => AskCancel(b))">Annullér</button>
+                                        }
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    }
+                }
+            </main>
+
+            
+            <div class="summary-card card" style="display:none"></div>
+        </div>
+    </div>
+}
+
+@if (cancelTarget is not null)
+{
+    <div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="cancelTitle">
+        <div class="modal-panel card">
+            <h3 id="cancelTitle" style="margin-top:0">Bekræft annullering</h3>
+            <p>
+                Annullér <strong>værelse @cancelTarget.RoomNumber</strong>
+                fra <strong>@cancelTarget.CheckIn.ToLocalTime().Date.ToString("dd.MM.yyyy")</strong>
+                til <strong>@cancelTarget.CheckOut.ToLocalTime().Date.ToString("dd.MM.yyyy")</strong>?
+            </p>
+            <p class="muted">Bemærk: Der kan gælde afbestillingsregler.</p>
+            <div class="form-actions" style="margin-top:.8rem">
+                <button class="btn" disabled="@cancelling" @onclick="ConfirmCancel">
+                    @(cancelling ? "Annullerer…" : "Ja, annullér")
+                </button>
+                <button class="btn-outline" @onclick="CloseModal">Behold reservationen</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool loading = true;
+    private bool IsLoggedIn = false;
+    private string? error;
+    private List<MyBookingVm>? bookings;
+
+    private bool showUpcoming = true;
+    private string? search;
+
+    private MyBookingVm? cancelTarget;
+    private bool cancelling;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var token = await LocalStorage.GetItemAsync<string>("authToken");
+            IsLoggedIn = !string.IsNullOrWhiteSpace(token);
+            if (IsLoggedIn) Api.SetBearer(token);
+            if (IsLoggedIn) await LoadMineAsync();
+        }
+        finally { loading = false; }
+    }
+
+    private void ShowUpcoming() => showUpcoming = true;
+    private void ShowPast() => showUpcoming = false;
+
+    private List<MyBookingVm> FilteredBookings()
+    {
+        var list = bookings ?? new();
+        var now = DateTimeOffset.Now.Date;
+
+        list = showUpcoming
+            ? list.Where(b => b.CheckIn.Date >= now).ToList()
+            : list.Where(b => b.CheckIn.Date < now).ToList();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLowerInvariant();
+            list = list.Where(b =>
+                b.RoomNumber.ToString().Contains(s) ||
+                b.CheckIn.ToLocalTime().Date.ToString("dd.MM.yyyy").Contains(s) ||
+                b.CheckOut.ToLocalTime().Date.ToString("dd.MM.yyyy").Contains(s)
+            ).ToList();
+        }
+        return list.OrderByDescending(x => x.CheckIn).ToList();
+    }
+
+    private async Task LoadMineAsync()
+    {
+        try
+        {
+            var res = await Api.GetMyBookingsAsync();
+            if ((int)res.StatusCode == 401 || (int)res.StatusCode == 403)
+            {
+                IsLoggedIn = false; bookings = null;
+                error = "Din session er udløbet. Log ind igen for at se dine bookinger."; return;
+            }
+            if (res.IsSuccessStatusCode)
+                bookings = await res.Content.ReadFromJsonAsync<List<MyBookingVm>>() ?? new();
+            else
+            {
+                var txt = await res.Content.ReadAsStringAsync();
+                error = "Kunne ikke hente bookinger: " + (string.IsNullOrWhiteSpace(txt) ? res.StatusCode.ToString() : txt);
+                bookings = new();
+            }
+        }
+        catch (Exception ex)
+        {
+            error = "Fejl ved hentning af bookinger: " + ex.Message;
+            bookings = new();
+        }
+    }
+
+    private void AskCancel(MyBookingVm b) => cancelTarget = b;
+    private void CloseModal() { cancelTarget = null; cancelling = false; }
+
+    private async Task ConfirmCancel()
+    {
+        if (cancelTarget is null) return;
+        cancelling = true;
+
+        try
+        {
+            var res = await Api.CancelBookingAsync(cancelTarget.Id);
+            if (res.IsSuccessStatusCode)
+            {
+                await JS.InvokeVoidAsync("toast", "Booking annulleret.");
+                bookings = bookings!.Where(x => x.Id != cancelTarget.Id).ToList();
+                CloseModal();
+            }
+            else
+            {
+                var msg = "Kunne ikke annullere.";
+                try
+                {
+                    var err = await res.Content.ReadFromJsonAsync<ApiError>();
+                    if (!string.IsNullOrWhiteSpace(err?.message)) msg = err!.message;
+                }
+                catch { }
+                await JS.InvokeVoidAsync("toast", msg);
+                cancelling = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("toast", ex.Message);
+            cancelling = false;
+        }
+    }
+
+    public class MyBookingVm
+    {
+        public int Id { get; set; }
+        public int RoomId { get; set; }
+        public int RoomNumber { get; set; }
+        public DateTimeOffset CheckIn { get; set; }
+        public DateTimeOffset CheckOut { get; set; }
+        public bool IsConfirmed { get; set; }
+    }
+
+    public class ApiError { public string? message { get; set; } }
+}
