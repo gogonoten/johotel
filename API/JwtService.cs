@@ -33,7 +33,7 @@ namespace API.Services
             // Sat til 60 min lige nu. (Kunne Måske sættes til 2 for at demonstere at den udløber i login til eksamen?)
             _expiryMinutes = int.Parse(configuration["Jwt:ExpiryMinutes"]
                 ?? Environment.GetEnvironmentVariable("JWT_EXPIRY_MINUTES")
-                ?? "60");
+                ?? "1");
         }
 
         // Token til Db bruger bestående af id navn email og rolle - Måske Demonstrer til eksamen hvor man finder den og hvordan den ser ud som streng og oversat
