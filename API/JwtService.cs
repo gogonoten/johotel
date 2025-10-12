@@ -154,7 +154,7 @@ namespace API.Services
                 signingCredentials: creds
             );
 
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            return new JwtSecurityTokenHandler().WriteToken(token); //123
         }
     }
 }
