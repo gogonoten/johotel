@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace API.Services;
 
-[Authorize] 
+[Authorize]
 public class TicketHub : Hub
 {
     private readonly AppDBContext _db;
@@ -22,7 +22,7 @@ public class TicketHub : Hub
     }
 
     private static readonly ConcurrentDictionary<string, ConnInfo> _conns = new();
-    private static readonly ConcurrentDictionary<int, HashSet<string>> _staffByTicket = new(); 
+    private static readonly ConcurrentDictionary<int, HashSet<string>> _staffByTicket = new();
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
@@ -50,6 +50,7 @@ public class TicketHub : Hub
 
     public async Task JoinTicket(int ticketId)
     {
+        // Kun ejer eller staff må joine gruppen.
         var user = Context.User!;
         var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -63,7 +64,7 @@ public class TicketHub : Hub
         await Groups.AddToGroupAsync(Context.ConnectionId, G(ticketId));
 
         var info = _conns.GetOrAdd(Context.ConnectionId, _ => new ConnInfo());
-        info.IsStaff = isStaff; 
+        info.IsStaff = isStaff;
         info.Tickets.Add(ticketId);
 
         int staffCount;

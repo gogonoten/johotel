@@ -36,7 +36,7 @@ namespace Blazor
             builder.Services.AddScoped<AuthenticationStateProvider,AuthStateProvider>();
             builder.Services.AddBlazoredLocalStorage();
 
-            
+            //Registering af HttpClient længere oppe og for SignalR her
             builder.Services.AddScoped<TicketSignalRService>();
 
             builder.Services.AddHttpClient<APIService>(client =>

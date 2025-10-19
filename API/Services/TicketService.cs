@@ -18,34 +18,38 @@ public interface ITicketService
     Task<List<TicketDto>> ListForStaffAsync();
 }
 
+
+
 public class TicketService : ITicketService
 {
     private readonly AppDBContext _db;
-    private readonly IHubContext<TicketHub> _hub;
-    private readonly IMailService _mail;
-    private readonly IHttpContextAccessor _http;
-    private readonly MailSettings _mailCfg;
+    private readonly IHubContext<TicketHub> _hub;           
+    private readonly IMailService _mail;                    
+    private readonly IHttpContextAccessor _http;           
+    private readonly MailSettings _mailCfg;                 
 
     public TicketService(
         AppDBContext db,
-        IHubContext<TicketHub> hub,
+        IHubContext<TicketHub> hub,                        
         IMailService mail,
         IHttpContextAccessor http,
         IOptions<MailSettings> mailCfg)
     {
         _db = db;
-        _hub = hub;
+        _hub = hub;                                        
         _mail = mail;
         _http = http;
         _mailCfg = mailCfg.Value;
     }
+
+
 
     private static int GetUserId(ClaimsPrincipal u) => int.Parse(u.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private static string GetUserName(ClaimsPrincipal u) => u.Identity?.Name ?? "User";
     private static bool IsStaff(ClaimsPrincipal u) => u.IsInRole("Admin") || u.IsInRole("Manager");
 
 
-    //Staff som pt er Role ID 1,2 
+    //Alle der skal have notifikation på email
     private async Task<List<(int Id, string Email, string Name)>> GetNotifyRecipientsAsync(int excludeUserId = 0)
     {
         var list = await _db.Users
@@ -63,6 +67,11 @@ public class TicketService : ITicketService
         return list.Select(x => (x.Id, x.Email, x.Name)).ToList();
     }
 
+
+
+
+
+
     private string BuildStaffLink(int ticketId)
     {
         var req = _http.HttpContext?.Request;
@@ -79,11 +88,16 @@ public class TicketService : ITicketService
         return $"{scheme}://{host}/tickets/{ticketId}";
     }
 
+
+
+
+
+
+
     public async Task<Ticket> CreateAsync(CreateTicketDto dto, ClaimsPrincipal user)
     {
         var userId = GetUserId(user);
         var userName = GetUserName(user);
-
         var count = await _db.Tickets.CountAsync();
         var number = $"Chat-ID: {(count + 1).ToString().PadLeft(6, '0')}";
 
@@ -140,6 +154,9 @@ public class TicketService : ITicketService
 
         return t;
     }
+
+
+
 
     public async Task<TicketDetailDto?> GetDetailAsync(int id, ClaimsPrincipal user)
     {
@@ -239,7 +256,7 @@ public class TicketService : ITicketService
             CreatedAtUtc = msg.CreatedAt.UtcDateTime
         });
 
-        if (dto.IsInternal) return; 
+        if (dto.IsInternal) return;
 
         var staffLink = BuildStaffLink(t.Id);
         var userLink = BuildUserLink(t.Id);
@@ -271,6 +288,8 @@ public class TicketService : ITicketService
         }
     }
 
+
+
     public async Task<List<TicketDto>> ListMineAsync(ClaimsPrincipal user)
     {
         var uid = GetUserId(user);
@@ -288,6 +307,9 @@ public class TicketService : ITicketService
                 CreatedAt = t.CreatedAt
             }).ToListAsync();
     }
+
+
+
 
     public async Task<List<TicketDto>> ListForStaffAsync()
     {

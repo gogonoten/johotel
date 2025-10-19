@@ -29,11 +29,14 @@
 </div>
 
 @code {
-    [Parameter] public int TicketId { get; set; }
+    [Parameter] public int TicketId { get; set; }     
 
-    [Parameter] public EventCallback<bool> OnAgentPresenceChanged { get; set; }
+
+    [Parameter] public EventCallback<bool> OnAgentPresenceChanged { get; set; } //Staff online
+
+
     public record InboundMsg(string Author, string Text, DateTime When);
-    [Parameter] public EventCallback<InboundMsg> OnInbound { get; set; }
+    [Parameter] public EventCallback<InboundMsg> OnInbound { get; set; }      
 
     private class ChatForm { public string Content { get; set; } = ""; public bool IsInternal { get; set; } }
     private ChatForm _form = new();
@@ -42,7 +45,7 @@
     private record Msg(string Author, string Text, bool IsInternal, DateTime When, bool IsMine);
 
     private readonly HashSet<int> _seenHistoryIds = new();
-    private readonly HashSet<string> _seenLiveKeys = new(); 
+    private readonly HashSet<string> _seenLiveKeys = new();
 
     private IDisposable? _subMessage;
     private IDisposable? _subPresence;
@@ -56,8 +59,8 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        await EnsureConnectedSubscribedAndJoinedAsync();
-        await LoadHistoryIfNeededAsync();
+        await EnsureConnectedSubscribedAndJoinedAsync();    
+        await LoadHistoryIfNeededAsync();                     
     }
 
     private async Task EnsureConnectedSubscribedAndJoinedAsync()
@@ -81,7 +84,6 @@
             _subMessage = Rtc.OnMessageReceived<IncomingHub>(async incoming =>
             {
                 if (incoming.TicketId != TicketId) return;
-
                 if (_myUserId != 0 && incoming.AuthorUserId == _myUserId) return;
 
                 var key = MakeKey(incoming.AuthorName, incoming.CreatedAtUtc, incoming.Content);
@@ -95,12 +97,11 @@
             });
 
             _subPresence = Rtc.OnAgentPresenceChanged<PresenceHub>(async p =>
-      {
-      if (p.TicketId != TicketId) return;
-      if (OnAgentPresenceChanged.HasDelegate)
-          await OnAgentPresenceChanged.InvokeAsync(p.StaffOnline);
-      });
-
+            {
+                if (p.TicketId != TicketId) return;
+                if (OnAgentPresenceChanged.HasDelegate)
+                    await OnAgentPresenceChanged.InvokeAsync(p.StaffOnline);
+            });
 
             _subJoined = Rtc.OnJoined<int>(tid => Console.WriteLine($"Joined ticket:{tid}"));
             _subError = Rtc.OnError<string>(msg => Console.Error.WriteLine($"Hub error: {msg}"));

@@ -1,123 +1,149 @@
 ﻿using System;
 using System.Linq;
 using System.Security.Claims;
-using System.Text.Json;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components.Authorization;
-using System.IdentityModel.Tokens.Jwt;               
+using System.IdentityModel.Tokens.Jwt;
+using System.Timers;
+using Microsoft.JSInterop; // for toast messages
+using Microsoft.AspNetCore.Components;
+using Blazor.Services;
 
-namespace Blazor.Services
+public class AuthStateProvider : AuthenticationStateProvider
 {
-    public class AuthStateProvider : AuthenticationStateProvider
+    private readonly TokenStorage _storage;
+    private readonly IJSRuntime _js;
+    private readonly NavigationManager _nav;
+    private System.Timers.Timer? _expiryTimer;
+
+    public AuthStateProvider(TokenStorage storage, IJSRuntime js, NavigationManager nav)
     {
-        private readonly TokenStorage _storage;
+        _storage = storage;
+        _js = js;
+        _nav = nav;
+    }
 
-        private static readonly ClaimsPrincipal Anonymous = new(new ClaimsIdentity());
+    // 🔹 Called automatically when the app starts or refreshes
+    public override async Task<AuthenticationState> GetAuthenticationStateAsync()
+    {
+        var token = await _storage.GetTokenAsync();
+        var principal = BuildPrincipalFromToken(token);
 
-        public AuthStateProvider(TokenStorage storage) => _storage = storage;
+        if (!string.IsNullOrWhiteSpace(token))
+            ScheduleAutoLogout(token);
 
-        public override async Task<AuthenticationState> GetAuthenticationStateAsync()
+        return new AuthenticationState(principal);
+    }
+
+    // 🔹 Called when user logs in or updates profile (new token)
+    public async Task MarkUserAsAuthenticatedAsync(string token)
+    {
+        await _storage.SetTokenAsync(token);
+        var principal = BuildPrincipalFromToken(token);
+        ScheduleAutoLogout(token);
+
+        NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(principal)));
+    }
+
+    // 🔹 Called when user logs out or token expires
+    public async Task MarkUserAsLoggedOutAsync(bool fromExpiry = false)
+    {
+        _expiryTimer?.Stop();
+        _expiryTimer?.Dispose();
+        _expiryTimer = null;
+
+        await _storage.ClearAsync();
+
+        var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
+        NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(anonymous)));
+
+        // Optional feedback when session expires
+        if (fromExpiry)
         {
-            var token = await _storage.GetTokenAsync();
-
-            var principal = BuildPrincipalFromToken(token);
-
-            return new AuthenticationState(principal);
+            await _js.InvokeVoidAsync("toast", "Din session er udløbet. Log ind igen.");
+            _nav.NavigateTo("/login", forceLoad: true);
         }
+    }
 
-        public async Task MarkUserAsAuthenticatedAsync(string token)
+    // 🔹 Build a ClaimsPrincipal from JWT
+    private ClaimsPrincipal BuildPrincipalFromToken(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return new ClaimsPrincipal(new ClaimsIdentity());
+
+        try
         {
-            await _storage.SetTokenAsync(token);
-
-            var principal = BuildPrincipalFromToken(token);
-
-            NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(principal)));
-        }
-
-        public async Task MarkUserAsLoggedOutAsync()
-        {
-            await _storage.ClearAsync();
-            NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()))));
-        }
-
-        public Task NotifyUserAuthentication(string token) => MarkUserAsAuthenticatedAsync(token);
-        public Task NotifyUserLogout() => MarkUserAsLoggedOutAsync();
-
-     
-        private static ClaimsIdentity ValidateAndBuildIdentityFromToken(string? jwt)
-        {
-            if (string.IsNullOrWhiteSpace(jwt)) return new ClaimsIdentity();
-            try 
-            {
-                var parts = jwt.Split('.');
-                if (parts.Length != 3) return new ClaimsIdentity();
-                string payload = parts[1].PadRight(parts[1].Length + (4 - parts[1].Length % 4) % 4, '=');
-                var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(payload));
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-
-                if (root.TryGetProperty("exp", out var expProp) && expProp.TryGetInt64(out long exp))
-                {
-                    var expUtc = DateTimeOffset.FromUnixTimeSeconds(exp);
-                    if (DateTimeOffset.UtcNow >= expUtc) return new ClaimsIdentity(); 
-                }
-
-                var claims = root.EnumerateObject()
-                    .Where(p => p.Value.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
-                    .Select(p => new Claim(p.Name, p.Value.ToString()));
-                return new ClaimsIdentity(claims, "jwt");
-            }
-            catch
-            {
-                return new ClaimsIdentity();
-            }
-        }
-
-        private static ClaimsPrincipal BuildPrincipalFromToken(string? token)
-        {
-            if (string.IsNullOrWhiteSpace(token))
-                return Anonymous;
-
             var handler = new JwtSecurityTokenHandler();
-            JwtSecurityToken jwt;
+            var jwt = handler.ReadJwtToken(token);
 
-            try { jwt = handler.ReadJwtToken(token); }
-            catch { return Anonymous; }
+            // Check expiry immediately
+            var exp = GetTokenExpiry(token);
+            if (exp != null && exp.Value <= DateTimeOffset.UtcNow)
+                return new ClaimsPrincipal(new ClaimsIdentity());
 
-            var claims = new List<Claim>(jwt.Claims);
-
-            bool hasStandardRole = claims.Any(c => c.Type == ClaimTypes.Role);
-            if (!hasStandardRole)
-            {
-                foreach (var c in jwt.Claims)
-                {
-                    if (c.Type.Equals("role", StringComparison.OrdinalIgnoreCase) ||
-                        c.Type.Equals("roles", StringComparison.OrdinalIgnoreCase))
-                    {
-                        claims.Add(new Claim(ClaimTypes.Role, c.Value));
-                    }
-                }
-            }
-
-            if (!claims.Any(c => c.Type == ClaimTypes.Name))
-            {
-                var name = jwt.Claims.FirstOrDefault(c =>
-                               c.Type == "username" ||
-                               c.Type == ClaimTypes.Name ||
-                               c.Type == "unique_name" ||
-                               c.Type == "name")
-                           ?.Value ?? "";
-                if (!string.IsNullOrWhiteSpace(name))
-                    claims.Add(new Claim(ClaimTypes.Name, name));
-            }
-
-            var identity = new ClaimsIdentity(
-                claims,
-                authenticationType: "jwt",
-                nameType: ClaimTypes.Name,
-                roleType: ClaimTypes.Role
-            );
-
+            var identity = new ClaimsIdentity(jwt.Claims, "jwt", ClaimTypes.Name, ClaimTypes.Role);
             return new ClaimsPrincipal(identity);
         }
+        catch
+        {
+            return new ClaimsPrincipal(new ClaimsIdentity());
+        }
+    }
+
+    // 🔹 Reads "exp" claim from the JWT
+    private static DateTimeOffset? GetTokenExpiry(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return null;
+
+        try
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var jwt = handler.ReadJwtToken(token);
+
+            var expClaim = jwt.Claims.FirstOrDefault(c => c.Type == "exp")?.Value;
+            if (expClaim == null)
+                return null;
+
+            if (long.TryParse(expClaim, out var expSeconds))
+                return DateTimeOffset.FromUnixTimeSeconds(expSeconds);
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // 🔹 Schedule auto logout when JWT expires
+    private void ScheduleAutoLogout(string token)
+    {
+        _expiryTimer?.Stop();
+        _expiryTimer?.Dispose();
+        _expiryTimer = null;
+
+        var expiry = GetTokenExpiry(token);
+        if (expiry == null)
+            return;
+
+        var msUntilExpiry = (expiry.Value - DateTimeOffset.UtcNow).TotalMilliseconds;
+        if (msUntilExpiry <= 0)
+        {
+            _ = MarkUserAsLoggedOutAsync(true);
+            return;
+        }
+
+        _expiryTimer = new System.Timers.Timer(msUntilExpiry);
+        _expiryTimer.Elapsed += async (_, __) =>
+        {
+            _expiryTimer?.Stop();
+            _expiryTimer?.Dispose();
+            _expiryTimer = null;
+
+            await MarkUserAsLoggedOutAsync(true);
+        };
+        _expiryTimer.AutoReset = false;
+        _expiryTimer.Start();
     }
 }
