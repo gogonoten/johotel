@@ -9,3 +9,4 @@ appsettings.Development.json
 GitHub-MCP.json
 mcp.json
 /Blazor/wwwroot/appsettings.Development.json
+/API/JwtService.cs
