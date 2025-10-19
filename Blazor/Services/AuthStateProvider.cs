@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Components;
 using Blazor.Services;
 
 public class AuthStateProvider : AuthenticationStateProvider
-{
+{//GG
     private readonly TokenStorage _storage;
     private readonly IJSRuntime _js;
     private readonly NavigationManager _nav;
